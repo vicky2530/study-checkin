@@ -1,0 +1,185 @@
+/* 学习打卡主页样式：第 4 步视觉收尾
+   配色：低饱和蓝紫，整洁协调
+   用法：直接覆盖本地的 style.css，浏览器 Ctrl+F5 强制刷新
+   只改样式，不动 index.html 和 app.js */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: #f4f5fb;
+  color: #33334d;
+  line-height: 1.6;
+}
+
+h1 {
+  font-size: 26px;
+  color: #3f4273;
+  margin: 8px 0 20px;
+}
+
+h2 {
+  font-size: 19px;
+  color: #4a4e8f;
+  margin: 28px 0 12px;
+  padding-left: 10px;
+  border-left: 4px solid #8a8dc7;
+}
+
+/* 今日任务：一行一项，勾选后变淡 */
+label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e3e5f2;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+label:hover {
+  border-color: #b9bce0;
+}
+
+label:has(input:checked) {
+  opacity: 0.6;
+}
+
+/* 任务文字占满中间，删除按钮贴右边 */
+label span {
+  flex: 1;
+}
+
+input.task {
+  accent-color: #6a6ec2;
+  width: 17px;
+  height: 17px;
+  margin-right: 0;
+  vertical-align: -3px;
+}
+
+.del {
+  border: none;
+  background: none;
+  color: #b0b3c8;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.del:hover {
+  color: #e05252;
+}
+
+/* 自己加任务：一行输入框 + 添加按钮 */
+#add-box {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+#new-task {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #e3e5f2;
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  color: #33334d;
+  background: #ffffff;
+}
+
+#new-task:focus {
+  outline: none;
+  border-color: #8a8dc7;
+}
+
+#add-task {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  background: #6a6ec2;
+  color: #ffffff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+#add-task:hover {
+  background: #5a5eb5;
+}
+
+/* 倒计时：一行一条 */
+#countdowns {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#countdowns li {
+  background: #ffffff;
+  border: 1px solid #e3e5f2;
+  border-left: 4px solid #8a8dc7;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+/* 单词卡：网格排列，点一张翻面 */
+#words {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+#words div {
+  background: #ffffff;
+  border: 1px solid #e3e5f2;
+  border-radius: 12px;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 10px 8px;
+  cursor: pointer;
+  font-size: 15px;
+  color: #3f4273;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+#words div:hover {
+  transform: translateY(-2px);
+  border-color: #8a8dc7;
+  box-shadow: 0 4px 12px rgba(90, 92, 160, 0.15);
+}
+
+/* 今日进度：进度条 + 百分比 */
+#progress {
+  background: #e3e5f2;
+  border-radius: 8px;
+  height: 12px;
+  overflow: hidden;
+  margin: 4px 0 6px;
+}
+
+#progress-bar {
+  height: 100%;
+  width: 0;
+  background: #6a6ec2;
+  border-radius: 8px;
+  transition: width 0.3s ease;
+}
+
+#progress-text {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #4a4e8f;
+}
