@@ -11,9 +11,22 @@ var fixedTasks = [
   { id: 'task8', text: '本周迷你项目', days: [0, 6] }
 ];
 
-// 打卡状态：日期 + 哪些勾了，存在一个地方，每天第一次打开自动换天
+// 周期表：用每周周一的日期做周编号，避免不同年份串在一起
 var d = new Date();
 var today = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+function dateText(date) {
+  return date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate();
+}
+function mondayOf(date) {
+  var result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  var day = result.getDay() || 7;
+  result.setDate(result.getDate() - day + 1);
+  return result;
+}
+var currentWeek = dateText(mondayOf(d));
+var selectedWeek = currentWeek;
+
+// 打卡状态仍存在 checkin；done 里面按周分开。每天第一次打开会清空所有周的勾。
 var saved = null;
 try { saved = JSON.parse(localStorage.getItem('checkin') || 'null'); } catch (e) { saved = null; }
 if (!saved || saved.date !== today) {
@@ -21,9 +34,20 @@ if (!saved || saved.date !== today) {
   // 兼容旧版：如果今天旧的打勾还在，把它搬过来
   if (localStorage.getItem('checkin-date') === today) {
     ['task1', 'task2', 'task3', 'task4', 'task5', 'task6'].forEach(function(id) {
-      if (localStorage.getItem(id) === 'yes') saved.done[id] = true;
+      if (localStorage.getItem(id) === 'yes') {
+        if (!saved.done[currentWeek]) saved.done[currentWeek] = {};
+        saved.done[currentWeek][id] = true;
+      }
     });
   }
+  localStorage.setItem('checkin', JSON.stringify(saved));
+}
+// 兼容上一版扁平的 done：把今天已有的勾放进本周
+var oldDone = saved.done || {};
+var hasOldDone = Object.keys(oldDone).some(function(key) { return typeof oldDone[key] === 'boolean'; });
+if (hasOldDone) {
+  saved.done = {};
+  saved.done[currentWeek] = oldDone;
   localStorage.setItem('checkin', JSON.stringify(saved));
 }
 // 旧的零散 key 清掉
@@ -35,6 +59,44 @@ function loadCustom() {
   try { return JSON.parse(localStorage.getItem('custom-tasks') || '[]'); } catch (e) { return []; }
 }
 var customTasks = loadCustom();
+// 兼容旧任务：没有 week 的任务属于本周
+customTasks.forEach(function(t) { if (!t.week) t.week = currentWeek; });
+localStorage.setItem('custom-tasks', JSON.stringify(customTasks));
+
+function loadPriorities() {
+  try { return JSON.parse(localStorage.getItem('task-priorities') || '{}'); } catch (e) { return {}; }
+}
+var priorities = loadPriorities();
+// 兼容旧优先级：旧的任务 id 映射搬到本周
+var hasOldPriority = Object.keys(priorities).some(function(key) { return typeof priorities[key] === 'string'; });
+if (hasOldPriority) {
+  var oldPriorities = priorities;
+  priorities = {};
+  priorities[currentWeek] = oldPriorities;
+  localStorage.setItem('task-priorities', JSON.stringify(priorities));
+}
+
+function weekDone() {
+  if (!saved.done[selectedWeek]) saved.done[selectedWeek] = {};
+  return saved.done[selectedWeek];
+}
+function weekPriorities() {
+  if (!priorities[selectedWeek]) priorities[selectedWeek] = {};
+  return priorities[selectedWeek];
+}
+
+// 默认显示本周，也可以查看前后四周
+var weekSelect = document.getElementById('week-select');
+for (var offset = -4; offset <= 4; offset++) {
+  var monday = mondayOf(d);
+  monday.setDate(monday.getDate() + offset * 7);
+  var sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  var option = document.createElement('option');
+  option.value = dateText(monday);
+  option.textContent = (offset === 0 ? '本周 ' : '') + dateText(monday) + ' 至 ' + dateText(sunday);
+  weekSelect.appendChild(option);
+}
+weekSelect.value = currentWeek;
 
 var tasksBox = document.getElementById('tasks');
 var weekday = new Date().getDay();
@@ -43,15 +105,20 @@ function showToday(t) {
 }
 function renderTasks() {
   tasksBox.innerHTML = '';
-  fixedTasks.concat(customTasks).forEach(function(t) {
-    if (!showToday(t)) return;
+  var weekTasks = customTasks.filter(function(t) { return t.week === selectedWeek; });
+  var rank = { high: 0, medium: 1, low: 2 };
+  var allTasks = fixedTasks.concat(weekTasks).filter(showToday);
+  allTasks.sort(function(a, b) {
+    return rank[weekPriorities()[a.id] || 'medium'] - rank[weekPriorities()[b.id] || 'medium'];
+  });
+  allTasks.forEach(function(t) {
     var label = document.createElement('label');
     var box = document.createElement('input');
     box.type = 'checkbox';
     box.className = 'task';
-    box.checked = !!saved.done[t.id];
+    box.checked = !!weekDone()[t.id];
     box.addEventListener('change', function() {
-      saved.done[t.id] = box.checked;
+      weekDone()[t.id] = box.checked;
       localStorage.setItem('checkin', JSON.stringify(saved));
       updateProgress();
     });
@@ -59,6 +126,22 @@ function renderTasks() {
     span.textContent = t.text;
     label.appendChild(box);
     label.appendChild(span);
+    var priority = document.createElement('select');
+    priority.className = 'priority';
+    [['low', '低'], ['medium', '中'], ['high', '高']].forEach(function(item) {
+      var option = document.createElement('option');
+      option.value = item[0];
+      option.textContent = item[1];
+      priority.appendChild(option);
+    });
+    priority.value = weekPriorities()[t.id] || 'medium';
+    priority.title = '任务优先级';
+    priority.addEventListener('change', function() {
+      weekPriorities()[t.id] = priority.value;
+      localStorage.setItem('task-priorities', JSON.stringify(priorities));
+      renderTasks();
+    });
+    label.appendChild(priority);
     if (t.custom) {
       var del = document.createElement('button');
       del.textContent = '×';
@@ -67,8 +150,10 @@ function renderTasks() {
         e.preventDefault();
         customTasks = customTasks.filter(function(x) { return x.id !== t.id; });
         localStorage.setItem('custom-tasks', JSON.stringify(customTasks));
-        delete saved.done[t.id];
+        delete weekDone()[t.id];
+        delete weekPriorities()[t.id];
         localStorage.setItem('checkin', JSON.stringify(saved));
+        localStorage.setItem('task-priorities', JSON.stringify(priorities));
         renderTasks();
       });
       label.appendChild(del);
@@ -89,13 +174,17 @@ function updateProgress() {
   document.getElementById('progress-text').textContent = '今日进度：' + pct + '%（' + done + '/' + total + '）';
 }
 renderTasks();
+weekSelect.addEventListener('change', function() {
+  selectedWeek = weekSelect.value;
+  renderTasks();
+});
 
 // 自己加任务：输入框 + 添加按钮，回车也行
 var newTaskInput = document.getElementById('new-task');
 function addTask() {
   var text = newTaskInput.value.trim();
   if (!text) return;
-  customTasks.push({ id: 'c' + Date.now(), text: text, custom: true });
+  customTasks.push({ id: 'c' + Date.now(), text: text, custom: true, week: selectedWeek });
   localStorage.setItem('custom-tasks', JSON.stringify(customTasks));
   newTaskInput.value = '';
   renderTasks();

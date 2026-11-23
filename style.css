@@ -31,6 +31,46 @@ h2 {
   border-left: 4px solid #8a8dc7;
 }
 
+#week-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -8px 0 16px;
+}
+
+#week-picker label {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: default;
+}
+
+#week-select,
+.priority {
+  border: 1px solid #d4d6e8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3f4273;
+  font-family: inherit;
+}
+
+#week-select {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.priority {
+  padding: 4px 6px;
+}
+
+#week-select:focus,
+.priority:focus {
+  outline: 2px solid #b9bce0;
+  outline-offset: 1px;
+}
+
 /* 今日任务：一行一项，勾选后变淡 */
 label {
   display: flex;
