@@ -25,6 +25,14 @@ function mondayOf(date) {
 }
 var currentWeek = dateText(mondayOf(d));
 var selectedWeek = currentWeek;
+var selectedSubject = '全部';
+var baseSubjects = ['全部', '高数', '线代', 'C语言', '英语', 'Python'];
+var customSubjects = [];
+try { customSubjects = JSON.parse(localStorage.getItem('custom-subjects') || '[]'); } catch (e) { customSubjects = []; }
+if (!Array.isArray(customSubjects)) customSubjects = [];
+customSubjects = customSubjects.filter(function(name, index, all) {
+  return typeof name === 'string' && name.trim() && baseSubjects.indexOf(name) === -1 && all.indexOf(name) === index;
+});
 
 // 打卡状态仍存在 checkin；done 里面按周分开。每天第一次打开会清空所有周的勾。
 var saved = null;
@@ -100,6 +108,53 @@ weekSelect.value = currentWeek;
 
 var tasksBox = document.getElementById('tasks');
 var weekday = new Date().getDay();
+function subjectOf(task) {
+  var name = task.text || '';
+  if (name.indexOf('高数') !== -1) return '高数';
+  if (name.indexOf('线代') !== -1) return '线代';
+  if (name.indexOf('C') !== -1) return 'C语言';
+  if (name.indexOf('四级') !== -1 || name.indexOf('英语') !== -1) return '英语';
+  if (name.indexOf('Python') !== -1) return 'Python';
+  // 未匹配到内置学科时，再检查用户添加的学科
+  for (var i = 0; i < customSubjects.length; i++) {
+    if (name.indexOf(customSubjects[i]) !== -1) return customSubjects[i];
+  }
+  return '';
+}
+function renderSubjects() {
+  var subjectsBox = document.getElementById('subjects');
+  subjectsBox.innerHTML = '';
+  baseSubjects.concat(customSubjects).forEach(function(subject) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = subject;
+    button.className = subject === selectedSubject ? 'subject active' : 'subject';
+    button.addEventListener('click', function() {
+      selectedSubject = subject;
+      renderSubjects();
+      renderTasks();
+    });
+    subjectsBox.appendChild(button);
+  });
+}
+renderSubjects();
+
+function addSubject() {
+  var input = document.getElementById('new-subject');
+  var name = input.value.trim();
+  if (!name || baseSubjects.indexOf(name) !== -1 || customSubjects.indexOf(name) !== -1) return;
+  customSubjects.push(name);
+  localStorage.setItem('custom-subjects', JSON.stringify(customSubjects));
+  input.value = '';
+  selectedSubject = name;
+  renderSubjects();
+  renderTasks();
+}
+document.getElementById('add-subject').addEventListener('click', addSubject);
+document.getElementById('new-subject').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') addSubject();
+});
+
 function showToday(t) {
   return !t.days || t.days.indexOf(weekday) !== -1;
 }
@@ -112,7 +167,9 @@ function renderTasks() {
     return t.week === selectedWeek && !t.replacement;
   });
   var rank = { high: 0, medium: 1, low: 2 };
-  var allTasks = (replaced ? weekTasks : fixedTasks.concat(weekTasks)).filter(showToday);
+  var allTasks = (replaced ? weekTasks : fixedTasks.concat(weekTasks)).filter(function(task) {
+    return showToday(task) && (selectedSubject === '全部' || subjectOf(task) === selectedSubject);
+  });
   allTasks.sort(function(a, b) {
     return rank[weekPriorities()[a.id] || 'medium'] - rank[weekPriorities()[b.id] || 'medium'];
   });
