@@ -71,6 +71,32 @@ h2 {
   outline-offset: 1px;
 }
 
+#upload-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+#upload-md {
+  padding: 8px 14px;
+  border: 1px solid #8a8dc7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #4a4e8f;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#upload-md:hover {
+  background: #eeeefa;
+}
+
+#upload-status {
+  font-size: 14px;
+  color: #5f638f;
+}
+
 /* 今日任务：一行一项，勾选后变淡 */
 label {
   display: flex;

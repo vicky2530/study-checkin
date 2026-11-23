@@ -105,9 +105,14 @@ function showToday(t) {
 }
 function renderTasks() {
   tasksBox.innerHTML = '';
-  var weekTasks = customTasks.filter(function(t) { return t.week === selectedWeek; });
+  var replaced = customTasks.some(function(t) {
+    return t.week === selectedWeek && t.replacement;
+  });
+  var weekTasks = customTasks.filter(function(t) {
+    return t.week === selectedWeek && !t.replacement;
+  });
   var rank = { high: 0, medium: 1, low: 2 };
-  var allTasks = fixedTasks.concat(weekTasks).filter(showToday);
+  var allTasks = (replaced ? weekTasks : fixedTasks.concat(weekTasks)).filter(showToday);
   allTasks.sort(function(a, b) {
     return rank[weekPriorities()[a.id] || 'medium'] - rank[weekPriorities()[b.id] || 'medium'];
   });
@@ -176,7 +181,52 @@ function updateProgress() {
 renderTasks();
 weekSelect.addEventListener('change', function() {
   selectedWeek = weekSelect.value;
+  document.getElementById('upload-status').textContent = '';
   renderTasks();
+});
+
+// 上传 md：每个以 “-” 开头的非空行，变成当前周的一项任务
+var mdFile = document.getElementById('md-file');
+document.getElementById('upload-md').addEventListener('click', function() {
+  mdFile.click();
+});
+mdFile.addEventListener('change', function() {
+  var file = mdFile.files[0];
+  if (!file) return;
+  var uploadWeek = selectedWeek;
+  var reader = new FileReader();
+  reader.addEventListener('load', function() {
+    var lines = String(reader.result).split(/\r?\n/).map(function(line) {
+      var match = line.match(/^\s*-\s+(.+?)\s*$/);
+      return match ? match[1] : '';
+    }).filter(Boolean);
+    if (!lines.length) {
+      document.getElementById('upload-status').textContent = '没有找到以 - 开头的任务';
+      mdFile.value = '';
+      return;
+    }
+
+    // 只替换上传时选中的周，其他周的数据保持原样
+    customTasks = customTasks.filter(function(t) { return t.week !== uploadWeek; });
+    customTasks.push({ id: 'replacement-' + uploadWeek, week: uploadWeek, replacement: true });
+    lines.forEach(function(text, index) {
+      customTasks.push({
+        id: 'md-' + uploadWeek + '-' + Date.now() + '-' + index,
+        text: text,
+        custom: true,
+        week: uploadWeek
+      });
+    });
+    saved.done[uploadWeek] = {};
+    priorities[uploadWeek] = {};
+    localStorage.setItem('custom-tasks', JSON.stringify(customTasks));
+    localStorage.setItem('checkin', JSON.stringify(saved));
+    localStorage.setItem('task-priorities', JSON.stringify(priorities));
+    document.getElementById('upload-status').textContent = '已导入 ' + lines.length + ' 项任务';
+    mdFile.value = '';
+    if (selectedWeek === uploadWeek) renderTasks();
+  });
+  reader.readAsText(file, 'UTF-8');
 });
 
 // 自己加任务：输入框 + 添加按钮，回车也行
