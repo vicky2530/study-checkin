@@ -251,35 +251,6 @@ input.task {
   margin-bottom: 10px;
 }
 
-/* 单词卡：网格排列，点一张翻面 */
-#words {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-#words div {
-  background: #ffffff;
-  border: 1px solid #e3e5f2;
-  border-radius: 12px;
-  min-height: 68px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 10px 8px;
-  cursor: pointer;
-  font-size: 15px;
-  color: #3f4273;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-}
-
-#words div:hover {
-  transform: translateY(-2px);
-  border-color: #8a8dc7;
-  box-shadow: 0 4px 12px rgba(90, 92, 160, 0.15);
-}
-
 /* 今日进度：进度条 + 百分比 */
 #progress {
   background: #e3e5f2;
