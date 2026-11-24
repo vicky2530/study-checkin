@@ -248,11 +248,13 @@ h2 {
 
 #add-subject-box {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 14px;
 }
 
-#new-subject {
+#new-subject,
+#delete-subject-select {
   min-width: 0;
   flex: 1;
   padding: 8px 10px;
@@ -261,7 +263,14 @@ h2 {
   font: inherit;
 }
 
-#add-subject {
+#delete-subject-select {
+  flex: 0 1 140px;
+  background: #ffffff;
+  color: #3f4273;
+}
+
+#add-subject,
+#delete-subject {
   padding: 8px 12px;
   border: 1px solid #8a8dc7;
   border-radius: 8px;
@@ -269,6 +278,16 @@ h2 {
   color: #4a4e8f;
   font: inherit;
   cursor: pointer;
+}
+
+#delete-subject {
+  color: #747792;
+  border-color: #c4c6d8;
+}
+
+#delete-subject:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* 今日任务：一行一项，勾选后变淡 */
@@ -528,6 +547,13 @@ body.dark-mode #new-subject,
 body.dark-mode #new-task,
 body.dark-mode #upload-md,
 body.dark-mode #add-subject {
+  background: #353650;
+  border-color: #656994;
+  color: #e7e8f5;
+}
+
+body.dark-mode #delete-subject-select,
+body.dark-mode #delete-subject {
   background: #353650;
   border-color: #656994;
   color: #e7e8f5;

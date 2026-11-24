@@ -39,6 +39,9 @@ var checkinHistory = {};
 try { checkinHistory = JSON.parse(localStorage.getItem('checkin-history') || '{}'); } catch (e) { checkinHistory = {}; }
 if (!checkinHistory || Array.isArray(checkinHistory)) checkinHistory = {};
 var baseSubjects = ['全部', '高数', '线代', 'C语言', '英语', 'Python', '语文'];
+var hiddenSubjects = [];
+try { hiddenSubjects = JSON.parse(localStorage.getItem('hidden-subjects') || '[]'); } catch (e) { hiddenSubjects = []; }
+if (!Array.isArray(hiddenSubjects)) hiddenSubjects = [];
 var customSubjects = [];
 try { customSubjects = JSON.parse(localStorage.getItem('custom-subjects') || '[]'); } catch (e) { customSubjects = []; }
 if (!Array.isArray(customSubjects)) customSubjects = [];
@@ -143,7 +146,10 @@ function subjectOf(task) {
 function renderSubjects() {
   var subjectsBox = document.getElementById('subjects');
   subjectsBox.innerHTML = '';
-  baseSubjects.concat(customSubjects).forEach(function(subject) {
+  var visibleSubjects = baseSubjects.concat(customSubjects).filter(function(subject) {
+    return subject === '全部' || hiddenSubjects.indexOf(subject) === -1;
+  });
+  visibleSubjects.forEach(function(subject) {
     var button = document.createElement('button');
     button.type = 'button';
     button.textContent = subject;
@@ -159,15 +165,31 @@ function renderSubjects() {
     });
     subjectsBox.appendChild(button);
   });
+  var deleteSelect = document.getElementById('delete-subject-select');
+  deleteSelect.innerHTML = '';
+  visibleSubjects.filter(function(subject) { return subject !== '全部'; }).forEach(function(subject) {
+    var option = document.createElement('option');
+    option.value = subject;
+    option.textContent = subject;
+    deleteSelect.appendChild(option);
+  });
+  document.getElementById('delete-subject').disabled = !deleteSelect.options.length;
 }
 renderSubjects();
 
 function addSubject() {
   var input = document.getElementById('new-subject');
   var name = input.value.trim();
-  if (!name || baseSubjects.indexOf(name) !== -1 || customSubjects.indexOf(name) !== -1) return;
-  customSubjects.push(name);
-  localStorage.setItem('custom-subjects', JSON.stringify(customSubjects));
+  if (!name) return;
+  var hiddenIndex = hiddenSubjects.indexOf(name);
+  if (hiddenIndex !== -1) {
+    hiddenSubjects.splice(hiddenIndex, 1);
+    localStorage.setItem('hidden-subjects', JSON.stringify(hiddenSubjects));
+  } else {
+    if (baseSubjects.indexOf(name) !== -1 || customSubjects.indexOf(name) !== -1) return;
+    customSubjects.push(name);
+    localStorage.setItem('custom-subjects', JSON.stringify(customSubjects));
+  }
   input.value = '';
   selectedSubject = '全部';
   renderSubjects();
@@ -176,6 +198,16 @@ function addSubject() {
 document.getElementById('add-subject').addEventListener('click', addSubject);
 document.getElementById('new-subject').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') addSubject();
+});
+document.getElementById('delete-subject').addEventListener('click', function() {
+  var name = document.getElementById('delete-subject-select').value;
+  if (!name) return;
+  hiddenSubjects.push(name);
+  hiddenSubjects = hiddenSubjects.filter(function(subject, index, all) {
+    return all.indexOf(subject) === index;
+  });
+  localStorage.setItem('hidden-subjects', JSON.stringify(hiddenSubjects));
+  renderSubjects();
 });
 
 function showToday(t) {
