@@ -26,6 +26,9 @@ function mondayOf(date) {
 var currentWeek = dateText(mondayOf(d));
 var selectedWeek = currentWeek;
 var selectedSubject = '全部';
+var checkinHistory = {};
+try { checkinHistory = JSON.parse(localStorage.getItem('checkin-history') || '{}'); } catch (e) { checkinHistory = {}; }
+if (!checkinHistory || Array.isArray(checkinHistory)) checkinHistory = {};
 var baseSubjects = ['全部', '高数', '线代', 'C语言', '英语', 'Python'];
 var customSubjects = [];
 try { customSubjects = JSON.parse(localStorage.getItem('custom-subjects') || '[]'); } catch (e) { customSubjects = []; }
@@ -234,6 +237,43 @@ function updateProgress() {
   var pct = total ? Math.round(done / total * 100) : 0;
   document.getElementById('progress-bar').style.width = pct + '%';
   document.getElementById('progress-text').textContent = '今日进度：' + pct + '%（' + done + '/' + total + '）';
+  recordTodayHistory(done, total);
+  renderHeatmap();
+}
+
+function recordTodayHistory(done, total) {
+  if (selectedSubject !== '全部') return;
+  checkinHistory[today] = { done: done, total: total };
+  localStorage.setItem('checkin-history', JSON.stringify(checkinHistory));
+}
+
+function dateKey(date) {
+  return date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate();
+}
+
+function renderHeatmap() {
+  var box = document.getElementById('heatmap');
+  box.innerHTML = '';
+  var end = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 83);
+  for (var i = 0; i < 84; i++) {
+    var date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    var key = dateKey(date);
+    var record = checkinHistory[key];
+    var cell = document.createElement('button');
+    cell.type = 'button';
+    cell.className = 'heat-cell';
+    cell.setAttribute('role', 'gridcell');
+    cell.title = key + '：' + (record ? record.done : 0) + ' 个任务';
+    var level = record && record.total ? Math.ceil(record.done / record.total * 4) : 0;
+    cell.classList.add('heat-level-' + Math.min(level, 4));
+    cell.addEventListener('click', (function(dateKeyValue, recordValue) {
+      return function() {
+        document.getElementById('heatmap-detail').textContent = dateKeyValue + '：完成 ' + (recordValue ? recordValue.done : 0) + ' 个任务';
+      };
+    })(key, record));
+    box.appendChild(cell);
+  }
 }
 renderTasks();
 weekSelect.addEventListener('change', function() {
