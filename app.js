@@ -245,15 +245,29 @@ function recordTodayHistory(done, total) {
   if (selectedSubject !== '全部') return;
   checkinHistory[today] = { done: done, total: total };
   localStorage.setItem('checkin-history', JSON.stringify(checkinHistory));
+  updateStreak();
 }
 
 function dateKey(date) {
   return date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate();
 }
 
+function updateStreak() {
+  var streak = 0;
+  var cursor = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  while (true) {
+    var record = checkinHistory[dateKey(cursor)];
+    if (!record || Number(record.done) < 1) break;
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  document.getElementById('streak-text').textContent = '已连续打卡 ' + streak + ' 天';
+}
+
 function renderHeatmap() {
   var box = document.getElementById('heatmap');
   box.innerHTML = '';
+  updateStreak();
   var end = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   var start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 83);
   for (var i = 0; i < 84; i++) {

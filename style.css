@@ -23,6 +23,13 @@ h1 {
   margin: 8px 0 20px;
 }
 
+#streak-text {
+  margin: -12px 0 18px;
+  color: #6a6ec2;
+  font-size: 15px;
+  font-weight: 600;
+}
+
 h2 {
   font-size: 19px;
   color: #4a4e8f;
