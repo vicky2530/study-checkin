@@ -146,11 +146,15 @@ function renderSubjects() {
     var button = document.createElement('button');
     button.type = 'button';
     button.textContent = subject;
-    button.className = subject === selectedSubject ? 'subject active' : 'subject';
+    button.className = subject === '全部' ? 'subject active' : 'subject';
+    button.setAttribute('aria-label', subject === '全部' ? '显示全部任务' : '打开' + subject + '学习页面');
     button.addEventListener('click', function() {
-      selectedSubject = subject;
-      renderSubjects();
-      renderTasks();
+      if (subject === '全部') {
+        selectedSubject = '全部';
+        renderTasks();
+        return;
+      }
+      window.location.href = 'subject.html?name=' + encodeURIComponent(subject);
     });
     subjectsBox.appendChild(button);
   });
@@ -164,7 +168,7 @@ function addSubject() {
   customSubjects.push(name);
   localStorage.setItem('custom-subjects', JSON.stringify(customSubjects));
   input.value = '';
-  selectedSubject = name;
+  selectedSubject = '全部';
   renderSubjects();
   renderTasks();
 }

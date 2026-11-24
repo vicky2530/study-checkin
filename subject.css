@@ -1,0 +1,40 @@
+* { box-sizing: border-box; }
+body {
+  position: relative;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: #f4f5fb;
+  color: #33334d;
+  line-height: 1.6;
+}
+#theme-toggle {
+  position: absolute; top: 20px; right: 20px; width: 36px; height: 36px;
+  border: 1px solid #d4d6e8; border-radius: 50%; background: #fff; color: #4a4e8f; cursor: pointer;
+}
+.back-link { display: inline-block; margin-bottom: 10px; color: #5f638f; text-decoration: none; }
+.back-link:hover { color: #3f4273; text-decoration: underline; }
+h1 { margin: 8px 48px 20px 0; color: #3f4273; font-size: 26px; }
+h2 { margin: 26px 0 12px; padding-left: 10px; border-left: 4px solid #8a8dc7; color: #4a4e8f; font-size: 19px; }
+#week-picker { display: flex; align-items: center; gap: 10px; }
+#week-select { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #d4d6e8; border-radius: 8px; background: #fff; color: #3f4273; font: inherit; }
+#tasks label { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 10px 14px; border: 1px solid #e3e5f2; border-radius: 8px; background: #fff; }
+#tasks label span { flex: 1; min-width: 0; }
+#tasks input[type=checkbox] { width: 17px; height: 17px; accent-color: #6a6ec2; }
+#tasks select { padding: 4px 6px; border: 1px solid #d4d6e8; border-radius: 6px; background: #fff; color: #3f4273; }
+#empty-state { padding: 18px 0; color: #6b6e8e; }
+.progress-section h2 { margin-top: 20px; }
+#progress { height: 12px; overflow: hidden; border-radius: 8px; background: #e3e5f2; }
+#progress-bar { width: 0; height: 100%; border-radius: inherit; background: #6a6ec2; transition: width .25s ease; }
+#progress-text { margin: 7px 0; color: #4a4e8f; font-size: 14px; }
+body.dark-mode { background: #25263a; color: #e7e8f5; }
+body.dark-mode h1, body.dark-mode h2 { color: #d5d6f2; }
+body.dark-mode h2 { border-left-color: #989bd4; }
+body.dark-mode .back-link, body.dark-mode #progress-text { color: #bfc1e8; }
+body.dark-mode #theme-toggle, body.dark-mode #week-select, body.dark-mode #tasks select { border-color: #656994; background: #353650; color: #e7e8f5; }
+body.dark-mode #tasks label { border-color: #505477; background: #303148; color: #e7e8f5; }
+body.dark-mode #progress { background: #464967; }
+body.dark-mode #progress-bar { background: #9296cf; }
+body.dark-mode #empty-state { color: #bfc1e8; }
+@media (max-width: 480px) { body { padding: 18px 14px 36px; } #tasks label { gap: 7px; padding: 9px 10px; } }
