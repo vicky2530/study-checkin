@@ -284,6 +284,83 @@ function dateKey(date) {
   return date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate();
 }
 
+// 学习计时器：运行中的本轮用开始时间推算，刷新页面也能接着走。
+var timerState = null;
+try { timerState = JSON.parse(localStorage.getItem('study-timer') || 'null'); } catch (e) { timerState = null; }
+if (!timerState || timerState.date !== dateKey(new Date())) {
+  timerState = { date: dateKey(new Date()), totalMs: 0, roundMs: 0, running: false, startedAt: 0 };
+  saveTimer();
+}
+timerState.totalMs = Number(timerState.totalMs) || 0;
+timerState.roundMs = Number(timerState.roundMs) || 0;
+timerState.running = !!timerState.running;
+timerState.startedAt = Number(timerState.startedAt) || 0;
+
+function saveTimer() {
+  localStorage.setItem('study-timer', JSON.stringify(timerState));
+}
+
+function formatDuration(milliseconds) {
+  var seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  var hours = Math.floor(seconds / 3600);
+  var minutes = Math.floor(seconds % 3600 / 60);
+  var remainingSeconds = seconds % 60;
+  return [hours, minutes, remainingSeconds].map(function(value) {
+    return String(value).padStart(2, '0');
+  }).join(':');
+}
+
+function currentRoundMs() {
+  return timerState.roundMs + (timerState.running ? Math.max(0, Date.now() - timerState.startedAt) : 0);
+}
+
+function resetTimerForNewDay() {
+  var currentDate = dateKey(new Date());
+  if (timerState.date === currentDate) return;
+  timerState = {
+    date: currentDate,
+    totalMs: 0,
+    roundMs: 0,
+    running: timerState.running,
+    startedAt: timerState.running ? Date.now() : 0
+  };
+  saveTimer();
+}
+
+function renderTimer() {
+  resetTimerForNewDay();
+  document.getElementById('round-time').textContent = formatDuration(currentRoundMs());
+  document.getElementById('total-time').textContent = formatDuration(timerState.totalMs);
+  document.getElementById('timer-toggle').textContent = timerState.running ? '暂停' : '开始';
+}
+
+document.getElementById('timer-toggle').addEventListener('click', function() {
+  resetTimerForNewDay();
+  if (timerState.running) {
+    timerState.roundMs = currentRoundMs();
+    timerState.running = false;
+    timerState.startedAt = 0;
+  } else {
+    timerState.running = true;
+    timerState.startedAt = Date.now();
+  }
+  saveTimer();
+  renderTimer();
+});
+
+document.getElementById('timer-finish').addEventListener('click', function() {
+  resetTimerForNewDay();
+  timerState.totalMs += currentRoundMs();
+  timerState.roundMs = 0;
+  timerState.running = false;
+  timerState.startedAt = 0;
+  saveTimer();
+  renderTimer();
+});
+
+renderTimer();
+window.setInterval(renderTimer, 250);
+
 function updateStreak() {
   var streak = 0;
   var cursor = new Date(d.getFullYear(), d.getMonth(), d.getDate());
