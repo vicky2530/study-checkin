@@ -39,6 +39,95 @@ body {
   outline-offset: 1px;
 }
 
+#celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(45, 46, 70, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+#celebration.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.celebration-message {
+  position: relative;
+  width: min(300px, 100%);
+  padding: 28px 24px 24px;
+  overflow: hidden;
+  border: 1px solid #c7c9e4;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3f4273;
+  text-align: center;
+  box-shadow: 0 14px 36px rgba(63, 66, 115, 0.18);
+  transform: translateY(8px) scale(0.97);
+}
+
+#celebration.show .celebration-message {
+  animation: celebration-in 0.35s ease forwards;
+}
+
+.celebration-message strong,
+.celebration-message span {
+  display: block;
+}
+
+.celebration-message strong {
+  font-size: 22px;
+}
+
+.celebration-message span {
+  margin-top: 4px;
+  color: #6c6f99;
+  font-size: 14px;
+}
+
+.confetti i {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 7px;
+  height: 13px;
+  border-radius: 2px;
+  background: #8589c2;
+}
+
+#celebration.show .confetti i { animation: confetti-fall 1.2s ease-out both; }
+.confetti i:nth-child(1) { margin-left: -100px; transform: rotate(18deg); }
+.confetti i:nth-child(2) { margin-left: -62px; background: #a5a8cf; animation-delay: 0.08s; }
+.confetti i:nth-child(3) { margin-left: -24px; background: #6f75ae; animation-delay: 0.03s; }
+.confetti i:nth-child(4) { margin-left: 18px; background: #a5a8cf; animation-delay: 0.12s; }
+.confetti i:nth-child(5) { margin-left: 56px; background: #7479b4; animation-delay: 0.05s; }
+.confetti i:nth-child(6) { margin-left: 94px; transform: rotate(-18deg); animation-delay: 0.1s; }
+
+@keyframes celebration-in {
+  to { transform: translateY(0) scale(1); }
+}
+
+@keyframes confetti-fall {
+  0% { top: -12px; opacity: 0; }
+  18% { opacity: 1; }
+  100% { top: 88px; opacity: 0; transform: rotate(150deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #celebration,
+  .celebration-message,
+  .confetti i {
+    animation: none !important;
+    transition: none;
+  }
+}
+
 h1 {
   font-size: 26px;
   color: #3f4273;
@@ -376,6 +465,21 @@ body.dark-mode #add-subject {
   background: #353650;
   border-color: #656994;
   color: #e7e8f5;
+}
+
+body.dark-mode #celebration {
+  background: rgba(17, 18, 29, 0.42);
+}
+
+body.dark-mode .celebration-message {
+  border-color: #656994;
+  background: #303148;
+  color: #e7e8f5;
+  box-shadow: 0 14px 36px rgba(10, 11, 20, 0.36);
+}
+
+body.dark-mode .celebration-message span {
+  color: #bfc1e8;
 }
 
 body.dark-mode label,

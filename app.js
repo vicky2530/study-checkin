@@ -200,7 +200,7 @@ function renderTasks() {
     box.addEventListener('change', function() {
       weekDone()[t.id] = box.checked;
       localStorage.setItem('checkin', JSON.stringify(saved));
-      updateProgress();
+      updateProgress(true);
     });
     var span = document.createElement('span');
     span.textContent = t.text;
@@ -244,7 +244,7 @@ function renderTasks() {
 }
 
 // 今日进度：打了几个勾 / 今天一共几项
-function updateProgress() {
+function updateProgress(allowCelebration) {
   var boxes = document.querySelectorAll('.task');
   var total = boxes.length;
   var done = 0;
@@ -254,6 +254,23 @@ function updateProgress() {
   document.getElementById('progress-text').textContent = '今日进度：' + pct + '%（' + done + '/' + total + '）';
   recordTodayHistory(done, total);
   renderHeatmap();
+  if (allowCelebration && selectedWeek === currentWeek && selectedSubject === '全部' && total > 0 && done === total) {
+    showCelebration();
+  }
+}
+
+function showCelebration() {
+  if (localStorage.getItem('completion-celebration-date') === today) return;
+  localStorage.setItem('completion-celebration-date', today);
+  var celebration = document.getElementById('celebration');
+  celebration.classList.remove('show');
+  celebration.setAttribute('aria-hidden', 'false');
+  void celebration.offsetWidth;
+  celebration.classList.add('show');
+  window.setTimeout(function() {
+    celebration.classList.remove('show');
+    celebration.setAttribute('aria-hidden', 'true');
+  }, 2600);
 }
 
 function recordTodayHistory(done, total) {
