@@ -18,6 +18,17 @@
 </div>
 <h1>今日任务</h1>
 <p id="streak-text">已连续打卡 0 天</p>
+<section id="study-timer" aria-label="学习计时器">
+<h2>学习计时器</h2>
+<div class="timer-display">
+<p>本轮时间 <strong id="round-time">00:00:00</strong></p>
+<p>今天累计 <strong id="total-time">00:00:00</strong></p>
+</div>
+<div class="timer-actions">
+<button id="timer-toggle" type="button">开始</button>
+<button id="timer-finish" type="button">结束本轮</button>
+</div>
+</section>
 <div id="week-picker">
 <label for="week-select">周期表：</label>
 <select id="week-select"></select>
@@ -30,6 +41,10 @@
 <div id="upload-box">
 <input id="md-file" type="file" accept=".md,text/markdown" hidden>
 <button id="upload-md" type="button">上传任务 md</button>
+<div id="add-box">
+<input id="new-task" placeholder="输入新任务，比如：复习 10 个单词">
+<button id="add-task">添加</button>
+</div>
 <span id="upload-status" aria-live="polite"></span>
 </div>
 <div id="tasks"></div>
@@ -37,26 +52,11 @@
 <div id="progress-bar"></div>
 </div>
 <p id="progress-text">今日进度：0%</p>
-<section id="study-timer" aria-label="学习计时器">
-<h2>学习计时器</h2>
-<div class="timer-display">
-<p>本轮时间 <strong id="round-time">00:00:00</strong></p>
-<p>今天累计 <strong id="total-time">00:00:00</strong></p>
-</div>
-<div class="timer-actions">
-<button id="timer-toggle" type="button">开始</button>
-<button id="timer-finish" type="button">结束本轮</button>
-</div>
-</section>
 <section id="heatmap-section" aria-label="最近 12 周打卡热力图">
 <h2>打卡热力图</h2>
 <div id="heatmap" role="grid"></div>
 <p id="heatmap-detail" aria-live="polite">点击日期查看完成情况</p>
 </section>
-<div id="add-box">
-<input id="new-task" placeholder="输入新任务，比如：复习 10 个单词">
-<button id="add-task">添加</button>
-</div>
 <h2>倒计时</h2>
 <ul id="countdowns"></ul>
 <script src="app.js"></script>

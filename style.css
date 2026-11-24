@@ -191,12 +191,14 @@ h2 {
 
 #upload-box {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-bottom: 16px;
 }
 
 #upload-md {
+  flex-shrink: 0;
   padding: 8px 14px;
   border: 1px solid #8a8dc7;
   border-radius: 8px;
@@ -211,6 +213,7 @@ h2 {
 }
 
 #upload-status {
+  flex-basis: 100%;
   font-size: 14px;
   color: #5f638f;
 }
@@ -319,11 +322,14 @@ input.task {
 /* 自己加任务：一行输入框 + 添加按钮 */
 #add-box {
   display: flex;
+  flex: 1;
+  min-width: 240px;
   gap: 8px;
-  margin-top: 4px;
+  margin: 0;
 }
 
 #new-task {
+  min-width: 0;
   flex: 1;
   padding: 10px 12px;
   border: 1px solid #e3e5f2;
@@ -390,6 +396,10 @@ input.task {
   margin: 0 0 4px;
   font-size: 14px;
   color: #4a4e8f;
+}
+
+#study-timer {
+  margin-bottom: 28px;
 }
 
 #study-timer h2 {
