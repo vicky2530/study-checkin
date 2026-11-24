@@ -38,7 +38,8 @@ var selectedSubject = '全部';
 var checkinHistory = {};
 try { checkinHistory = JSON.parse(localStorage.getItem('checkin-history') || '{}'); } catch (e) { checkinHistory = {}; }
 if (!checkinHistory || Array.isArray(checkinHistory)) checkinHistory = {};
-var baseSubjects = ['全部', '高数', '线代', 'C语言', '英语', 'Python', '语文'];
+var baseSubjects = ['全部', '地基', '英语四级', '前端', '后端', 'AI层', '工程', '贯穿'];
+var legacySubjects = ['高数', '线代', 'C语言', '英语', 'Python', '语文'];
 var hiddenSubjects = [];
 try { hiddenSubjects = JSON.parse(localStorage.getItem('hidden-subjects') || '[]'); } catch (e) { hiddenSubjects = []; }
 if (!Array.isArray(hiddenSubjects)) hiddenSubjects = [];
@@ -46,7 +47,7 @@ var customSubjects = [];
 try { customSubjects = JSON.parse(localStorage.getItem('custom-subjects') || '[]'); } catch (e) { customSubjects = []; }
 if (!Array.isArray(customSubjects)) customSubjects = [];
 customSubjects = customSubjects.filter(function(name, index, all) {
-  return typeof name === 'string' && name.trim() && baseSubjects.indexOf(name) === -1 && all.indexOf(name) === index;
+  return typeof name === 'string' && name.trim() && baseSubjects.indexOf(name) === -1 && legacySubjects.indexOf(name) === -1 && all.indexOf(name) === index;
 });
 
 // 打卡状态仍存在 checkin；done 里面按周分开。每天第一次打开会清空所有周的勾。
@@ -131,12 +132,13 @@ document.getElementById('theme-toggle').addEventListener('click', function() {
 var weekday = new Date().getDay();
 function subjectOf(task) {
   var name = task.text || '';
-  if (name.indexOf('语文') !== -1) return '语文';
-  if (name.indexOf('高数') !== -1) return '高数';
-  if (name.indexOf('线代') !== -1) return '线代';
-  if (name.indexOf('C') !== -1) return 'C语言';
-  if (name.indexOf('四级') !== -1 || name.indexOf('英语') !== -1) return '英语';
-  if (name.indexOf('Python') !== -1) return 'Python';
+  if (/高数|线代|C语言|C 语言/.test(name)) return '地基';
+  if (/四级|单词|听力|英语阅读|写作翻译/.test(name)) return '英语四级';
+  if (/HTML|CSS|JavaScript|TypeScript|Vue|React|前端/i.test(name)) return '前端';
+  if (/Python|FastAPI|Flask|RESTful|MySQL|向量库|后端/i.test(name)) return '后端';
+  if (/大模型|提示词|Function Calling|RAG|Agent|MCP|AI层/i.test(name)) return 'AI层';
+  if (/Git|Linux|Docker|CI\/CD|测试|工程/i.test(name)) return '工程';
+  if (/业务理解|技术英语|英语读文档|AI编程工具|贯穿/i.test(name)) return '贯穿';
   // 未匹配到内置学科时，再检查用户添加的学科
   for (var i = 0; i < customSubjects.length; i++) {
     if (name.indexOf(customSubjects[i]) !== -1) return customSubjects[i];

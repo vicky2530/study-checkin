@@ -8,8 +8,17 @@ var fixedTasks = [
   { id: 'task7', text: 'Python 30 分钟' },
   { id: 'task8', text: '本周迷你项目', days: [0, 6] }
 ];
-var subject = new URLSearchParams(window.location.search).get('name') || '高数';
-var moduleNames = ['现代文阅读', '古代诗文阅读', '文言文阅读', '语言文字运用', '名句名篇默写', '写作'];
+var subject = new URLSearchParams(window.location.search).get('name') || '地基';
+var subjectModules = {
+  '地基': ['C语言', '高数', '线代'],
+  '英语四级': ['单词', '听力', '阅读', '写作翻译'],
+  '前端': ['HTML/CSS/JavaScript', 'TypeScript', 'Vue或React'],
+  '后端': ['Python', 'FastAPI/Flask', 'RESTful API', 'MySQL', '向量库'],
+  'AI层': ['调大模型API', '提示词工程', 'Function Calling', 'RAG', 'Agent编排', 'MCP'],
+  '工程': ['Git', 'Linux', 'Docker', 'CI/CD', '测试'],
+  '贯穿': ['业务理解', '英语读文档', 'AI编程工具']
+};
+var moduleNames = subjectModules[subject] || [];
 var currentModule = new URLSearchParams(window.location.search).get('module');
 var today = new Date();
 function dateText(date) {
@@ -22,18 +31,36 @@ function mondayOf(date) {
 }
 function subjectOf(task) {
   var name = task.text || '';
-  if (name.indexOf('语文') !== -1) return '语文';
-  if (name.indexOf('高数') !== -1) return '高数';
-  if (name.indexOf('线代') !== -1) return '线代';
-  if (name.indexOf('C') !== -1) return 'C语言';
-  if (name.indexOf('四级') !== -1 || name.indexOf('英语') !== -1) return '英语';
-  if (name.indexOf('Python') !== -1) return 'Python';
+  if (/高数|线代|C语言|C 语言/.test(name)) return '地基';
+  if (/四级|单词|听力|英语阅读|写作翻译/.test(name)) return '英语四级';
+  if (/HTML|CSS|JavaScript|TypeScript|Vue|React|前端/i.test(name)) return '前端';
+  if (/Python|FastAPI|Flask|RESTful|MySQL|向量库|后端/i.test(name)) return '后端';
+  if (/大模型|提示词|Function Calling|RAG|Agent|MCP|AI层/i.test(name)) return 'AI层';
+  if (/Git|Linux|Docker|CI\/CD|测试|工程/i.test(name)) return '工程';
+  if (/业务理解|技术英语|英语读文档|AI编程工具|贯穿/i.test(name)) return '贯穿';
   var custom = [];
   try { custom = JSON.parse(localStorage.getItem('custom-subjects') || '[]'); } catch (e) {}
   for (var i = 0; i < custom.length; i++) {
     if (name.indexOf(custom[i]) !== -1) return custom[i];
   }
   return '';
+}
+function moduleOf(task) {
+  var name = task.text || '';
+  var rules = {
+    '地基': [['C语言', /C语言|C 语言/], ['高数', /高数/], ['线代', /线代/]],
+    '英语四级': [['单词', /单词/], ['听力', /听力/], ['阅读', /阅读/], ['写作翻译', /写作|翻译/]],
+    '前端': [['HTML/CSS/JavaScript', /HTML|CSS|JavaScript/i], ['TypeScript', /TypeScript/i], ['Vue或React', /Vue|React/i]],
+    '后端': [['Python', /Python/i], ['FastAPI/Flask', /FastAPI|Flask/i], ['RESTful API', /RESTful/i], ['MySQL', /MySQL/i], ['向量库', /向量库/]],
+    'AI层': [['调大模型API', /大模型.*API|API.*大模型/i], ['提示词工程', /提示词/], ['Function Calling', /Function Calling/i], ['RAG', /RAG/i], ['Agent编排', /Agent/i], ['MCP', /MCP/i]],
+    '工程': [['Git', /Git/i], ['Linux', /Linux/i], ['Docker', /Docker/i], ['CI/CD', /CI\/CD/i], ['测试', /测试/]],
+    '贯穿': [['业务理解', /业务理解/], ['英语读文档', /技术英语|英语读文档/], ['AI编程工具', /AI编程工具/i]]
+  };
+  var entries = rules[subject] || [];
+  for (var i = 0; i < entries.length; i++) {
+    if (entries[i][1].test(name)) return entries[i][0];
+  }
+  return task.module || '';
 }
 function parseValue(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch (e) { return fallback; }
@@ -60,22 +87,20 @@ var title = document.getElementById('subject-title');
 title.textContent = subject;
 document.title = subject + '学习';
 var moduleEntries = document.getElementById('module-entries');
-if (subject === '语文') {
+if (moduleNames.length) {
   moduleEntries.hidden = false;
   document.getElementById('subject-content').hidden = !currentModule;
   moduleEntries.classList.toggle('module-page', !!currentModule);
   if (currentModule && moduleNames.indexOf(currentModule) !== -1) {
     title.textContent = currentModule;
-    document.title = currentModule + ' | 语文学习';
-    document.querySelector('.back-link').href = 'subject.html?name=' + encodeURIComponent('语文');
-    document.querySelector('.back-link').textContent = '返回语文';
-    document.getElementById('subject-content').classList.toggle('literary', [1, 2, 4].indexOf(moduleNames.indexOf(currentModule)) !== -1);
+    document.title = currentModule + ' | ' + subject;
+    document.querySelector('.back-link').href = 'subject.html?name=' + encodeURIComponent(subject);
+    document.querySelector('.back-link').textContent = '返回' + subject;
   } else {
-    moduleNames.forEach(function(name, index) {
+    moduleNames.forEach(function(name) {
       var link = document.createElement('a');
       link.className = 'module-entry';
-      if ([1, 2, 4].indexOf(index) !== -1) link.classList.add('literary');
-      link.href = 'subject.html?name=' + encodeURIComponent('语文') + '&module=' + encodeURIComponent(name);
+      link.href = 'subject.html?name=' + encodeURIComponent(subject) + '&module=' + encodeURIComponent(name);
       link.textContent = name;
       moduleEntries.appendChild(link);
     });
@@ -97,12 +122,12 @@ themeButton.addEventListener('click', function() {
   updateTheme();
 });
 function render() {
-  if (subject === '语文' && !currentModule) return;
+  if (moduleNames.length && !currentModule) return;
   var week = weekSelect.value;
   var replaced = customTasks.some(function(task) { return task.week === week && task.replacement; });
   var weekCustom = customTasks.filter(function(task) { return task.week === week && !task.replacement; });
   var tasks = (replaced ? weekCustom : fixedTasks.concat(weekCustom)).filter(function(task) {
-    return subjectOf(task) === subject && (!currentModule || task.module === currentModule || task.text.indexOf(currentModule) !== -1);
+    return subjectOf(task) === subject && (!currentModule || moduleOf(task) === currentModule);
   });
   var doneForWeek = saved.done[week] || {};
   var priorityForWeek = priorities[week] || {};
