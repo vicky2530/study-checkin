@@ -22,6 +22,12 @@ h2 { margin: 0 0 10px; color: #4a4e8f; font-size: 18px; }
 .mistake-form textarea { min-height:70px; padding:8px; font:14px/1.5 Consolas,monospace; }
 .error-item { padding:12px; border-bottom:1px solid #d9dbea; }
 .error-item p { white-space:pre-line; }
+.error-item h3 { margin:16px 0 6px; font-size:15px; }
+.wrong-code-title { color:#9a5148; }
+.correct-code-title { color:#4e6f62; }
+.error-item pre { white-space:pre; }
+.wrong-code { border-left:4px solid #b56a60; }
+.correct-code { border-left:4px solid #668b7a; }
 #course-content { display: grid; gap: 12px; }
 .course-card, .lesson-link, section { padding: 18px 20px; border: 1px solid #d9dbea; border-radius: 8px; background: #fff; }
 .course-card { display: flex; justify-content: space-between; align-items: center; color: #4a4e8f; text-decoration: none; }
@@ -57,4 +63,6 @@ body.dark-mode .c-nav a, body.dark-mode .bank-search, body.dark-mode select { bo
 body.dark-mode .course-card > a:first-child, body.dark-mode .c-nav a, body.dark-mode .bank-row summary, body.dark-mode .error-item summary { color:#d5d6f2; }
 body.dark-mode .pitfalls, body.dark-mode .mistake-form { border-color:#8b5f59; background:#3b2d32; }
 body.dark-mode .pitfalls p, body.dark-mode .mistake-form label { color:#efb8ad; }
+body.dark-mode .wrong-code-title { color:#efb8ad; }
+body.dark-mode .correct-code-title { color:#acd3c0; }
 @media (max-width: 480px) { body { padding: 18px 14px 36px; } .course-card, .lesson-link, section { padding: 15px; } }
