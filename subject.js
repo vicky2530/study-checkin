@@ -100,7 +100,7 @@ if (moduleNames.length) {
     moduleNames.forEach(function(name) {
       var link = document.createElement('a');
       link.className = 'module-entry';
-      link.href = 'subject.html?name=' + encodeURIComponent(subject) + '&module=' + encodeURIComponent(name);
+      link.href = subject === '地基' && name === 'C语言' ? 'c.html' : 'subject.html?name=' + encodeURIComponent(subject) + '&module=' + encodeURIComponent(name);
       link.textContent = name;
       moduleEntries.appendChild(link);
     });
