@@ -14,6 +14,15 @@ var fixedTasks = [
 // 周期表：用每周周一的日期做周编号，避免不同年份串在一起
 var d = new Date();
 var today = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+var darkMode = localStorage.getItem('theme-preference') === 'dark';
+if (darkMode) document.body.classList.add('dark-mode');
+function updateThemeButton() {
+  var button = document.getElementById('theme-toggle');
+  button.textContent = darkMode ? '日' : '月';
+  button.setAttribute('aria-label', darkMode ? '切换浅色模式' : '切换深色模式');
+  button.title = darkMode ? '切换浅色模式' : '切换深色模式';
+}
+updateThemeButton();
 function dateText(date) {
   return date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate();
 }
@@ -110,6 +119,12 @@ for (var offset = -4; offset <= 4; offset++) {
 weekSelect.value = currentWeek;
 
 var tasksBox = document.getElementById('tasks');
+document.getElementById('theme-toggle').addEventListener('click', function() {
+  darkMode = !darkMode;
+  document.body.classList.toggle('dark-mode', darkMode);
+  localStorage.setItem('theme-preference', darkMode ? 'dark' : 'light');
+  updateThemeButton();
+});
 var weekday = new Date().getDay();
 function subjectOf(task) {
   var name = task.text || '';

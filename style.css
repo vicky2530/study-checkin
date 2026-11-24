@@ -8,6 +8,7 @@
 }
 
 body {
+  position: relative;
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 20px 48px;
@@ -15,6 +16,27 @@ body {
   background: #f4f5fb;
   color: #33334d;
   line-height: 1.6;
+}
+
+#theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d4d6e8;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #4a4e8f;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#theme-toggle:hover,
+#theme-toggle:focus {
+  border-color: #6a6ec2;
+  outline: 2px solid #b9bce0;
+  outline-offset: 1px;
 }
 
 h1 {
@@ -321,3 +343,63 @@ input.task {
   color: #5f638f;
   font-size: 13px;
 }
+
+body.dark-mode {
+  background: #25263a;
+  color: #e7e8f5;
+}
+
+body.dark-mode h1,
+body.dark-mode h2 {
+  color: #d5d6f2;
+}
+
+body.dark-mode h2 {
+  border-left-color: #989bd4;
+}
+
+body.dark-mode #streak-text,
+body.dark-mode #progress-text,
+body.dark-mode #heatmap-detail,
+body.dark-mode #upload-status {
+  color: #bfc1e8;
+}
+
+body.dark-mode #theme-toggle,
+body.dark-mode #week-select,
+body.dark-mode .priority,
+body.dark-mode .subject,
+body.dark-mode #new-subject,
+body.dark-mode #new-task,
+body.dark-mode #upload-md,
+body.dark-mode #add-subject {
+  background: #353650;
+  border-color: #656994;
+  color: #e7e8f5;
+}
+
+body.dark-mode label,
+body.dark-mode #countdowns li {
+  background: #303148;
+  border-color: #505477;
+  color: #e7e8f5;
+}
+
+body.dark-mode label:hover {
+  border-color: #989bd4;
+}
+
+body.dark-mode #progress {
+  background: #464967;
+}
+
+body.dark-mode #upload-md:hover,
+body.dark-mode #add-subject:hover {
+  background: #44476a;
+}
+
+body.dark-mode .heat-cell.heat-level-0 { background: #3a3c52; }
+body.dark-mode .heat-cell.heat-level-1 { background: #575a82; }
+body.dark-mode .heat-cell.heat-level-2 { background: #7478aa; }
+body.dark-mode .heat-cell.heat-level-3 { background: #9296cf; }
+body.dark-mode .heat-cell.heat-level-4 { background: #b0b3e8; }
