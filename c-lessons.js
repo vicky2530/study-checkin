@@ -1,30 +1,9 @@
 var cLessons = [
-  { name: '基础入门', lessons: [
-    { title: '第 1 课：第一个 C 程序', explanation: '认识 main 函数、头文件和 printf，理解程序从 main 开始执行。', code: '#include <stdio.h>\n\nint main(void) {\n    printf("Hello, C!\\n");\n    return 0;\n}', exercise: '修改程序，让它分两行输出你的姓名和学习目标。' },
-    { title: '第 2 课：变量与数据类型', explanation: '使用 int、double 和 char 保存不同类型的数据，并用合适的格式符输出。', code: 'int age = 18;\ndouble score = 92.5;\nchar level = 65;\nprintf("%d %.1f %c\\n", age, score, level);', exercise: '定义身高、体重和等级三个变量，并把它们输出。' }
-  ]},
-  { name: '条件判断', lessons: [
-    { title: '第 1 课：if 与 else', explanation: '条件表达式为真时执行 if 分支，否则执行 else 分支。', code: 'int score = 85;\nif (score >= 60) {\n    printf("及格\\n");\n} else {\n    printf("继续努力\\n");\n}', exercise: '输入一个整数，判断它是正数、负数还是零。' },
-    { title: '第 2 课：switch 多分支', explanation: '当一个值需要匹配多个固定选项时，可以使用 switch 组织分支。', code: 'switch (day) {\ncase 1: printf("周一"); break;\ncase 2: printf("周二"); break;\ndefault: printf("其他");\n}', exercise: '用 switch 根据 1 到 4 输出春、夏、秋、冬。' }
-  ]},
-  { name: '循环', lessons: [
-    { title: '第 1 课：for 循环', explanation: 'for 循环适合已知重复次数的任务，由初始化、条件和更新三部分组成。', code: 'int sum = 0;\nfor (int i = 1; i <= 100; i++) {\n    sum += i;\n}\nprintf("%d\\n", sum);', exercise: '用 for 循环计算 1 到 20 中所有偶数的和。' },
-    { title: '第 2 课：while 循环', explanation: 'while 会在条件为真时持续执行，适合重复次数不确定的场景。', code: 'int n = 3;\nwhile (n > 0) {\n    printf("%d\\n", n);\n    n--;\n}', exercise: '使用 while 循环输出 10 到 1 的倒序数字。' }
-  ]},
-  { name: '数组', lessons: [
-    { title: '第 1 课：一维数组', explanation: '数组在连续内存中保存相同类型的数据，下标从 0 开始。', code: 'int scores[3] = {88, 92, 79};\nfor (int i = 0; i < 3; i++) {\n    printf("%d\\n", scores[i]);\n}', exercise: '创建一个含 5 个整数的数组，找出其中的最大值。' },
-    { title: '第 2 课：字符数组', explanation: 'C 字符串是以空字符结尾的字符数组，可以用 %s 输出。', code: 'char name[] = "Codex";\nprintf("%s\\n", name);', exercise: '读取一个单词，统计它包含多少个字符。' }
-  ]},
-  { name: '函数', lessons: [
-    { title: '第 1 课：定义与调用函数', explanation: '函数把一段逻辑封装为可复用单元，通过参数接收数据，通过返回值给出结果。', code: 'int add(int a, int b) {\n    return a + b;\n}\n\nint result = add(3, 5);', exercise: '编写 max 函数，返回两个整数中较大的一个。' },
-    { title: '第 2 课：作用域', explanation: '局部变量只在所在代码块内有效，不同函数可以拥有同名局部变量。', code: 'void show(void) {\n    int count = 1;\n    printf("%d\\n", count);\n}', exercise: '写两个函数，各自定义同名变量并输出，观察它们互不影响。' }
-  ]},
-  { name: '指针', lessons: [
-    { title: '第 1 课：地址与指针', explanation: '指针保存变量的内存地址，& 获取地址，* 访问地址指向的值。', code: 'int value = 10;\nint *p = &value;\n*p = 20;\nprintf("%d\\n", value);', exercise: '用指针把一个整数变量的值增加 5。' },
-    { title: '第 2 课：指针参数', explanation: '把变量地址传给函数后，函数可以直接修改调用者的变量。', code: 'void swap(int *a, int *b) {\n    int temp = *a;\n    *a = *b;\n    *b = temp;\n}', exercise: '编写函数，通过指针同时返回两个数的和与差。' }
-  ]},
-  { name: '结构体', lessons: [
-    { title: '第 1 课：定义结构体', explanation: '结构体把不同类型的字段组合成一个完整的数据对象。', code: 'struct Student {\n    char name[20];\n    int age;\n    double score;\n};', exercise: '定义 Book 结构体，包含书名、价格和页数。' },
-    { title: '第 2 课：结构体变量', explanation: '使用点运算符访问结构体变量的字段，结构体也可以组成数组。', code: 'struct Student s = {"Lin", 18, 95.0};\nprintf("%s %.1f\\n", s.name, s.score);', exercise: '创建 3 个学生的结构体数组，输出成绩最高的学生。' }
-  ]}
+{name:'基础入门',points:[{title:'程序结构与输出',explanation:'C 程序从 main 开始执行，printf 用于格式化输出。',example:{prompt:'输出 Hello, C!',code:'#include <stdio.h>\nint main(void){ printf("Hello, C!\n"); return 0;}',analysis:'引入 stdio.h 后调用 printf。'},exercises:[{prompt:'输出你的姓名。',answer:'printf("小明\n");',analysis:'使用 printf 输出字符串。'},{prompt:'输出两行学习目标。',answer:'printf("学好 C\n坚持练习\n");',analysis:'\n 表示换行。'},{prompt:'输出整数 2026。',answer:'printf("%d\n", 2026);',analysis:'%d 输出整数。'}]}]},
+{name:'条件判断',points:[{title:'if 与 switch',explanation:'if 处理条件范围，switch 匹配固定选项。',example:{prompt:'判断成绩是否及格。',code:'if(score>=60) printf("及格"); else printf("不及格");',analysis:'比较 score 与 60。'},exercises:[{prompt:'判断正负零。',answer:'if(n>0) printf("正数"); else if(n<0) printf("负数"); else printf("零");',analysis:'三个分支覆盖所有情况。'},{prompt:'switch 输出季节。',answer:'switch(n){case 1:printf("春");break;case 2:printf("夏");break;case 3:printf("秋");break;}',analysis:'case 后用 break。'},{prompt:'求两个数较大值。',answer:'int max=a>b?a:b;',analysis:'条件运算符完成二选一。'}]}]},
+{name:'循环',points:[{title:'for 与 while',explanation:'for 适合次数明确的重复，while 由条件控制结束。',example:{prompt:'计算 1 到 100 的和。',code:'int sum=0; for(int i=1;i<=100;i++) sum+=i;',analysis:'每轮累加并递增 i。'},exercises:[{prompt:'输出 1 到 10。',answer:'for(int i=1;i<=10;i++) printf("%d ",i);',analysis:'循环十次。'},{prompt:'计算偶数和。',answer:'int sum=0; for(int i=2;i<=20;i+=2) sum+=i;',analysis:'步长为 2。'},{prompt:'倒序输出 5 到 1。',answer:'int i=5; while(i>=1){printf("%d ",i);i--;}',analysis:'每轮递减。'}]}]},
+{name:'数组',points:[{title:'一维数组与字符串',explanation:'数组下标从 0 开始，字符数组以空字符结尾可作为字符串。',example:{prompt:'遍历成绩。',code:'int a[3]={88,92,79}; for(int i=0;i<3;i++) printf("%d ",a[i]);',analysis:'下标范围是 0 到 length-1。'},exercises:[{prompt:'找最大值。',answer:'int max=a[0]; for(int i=1;i<5;i++) if(a[i]>max) max=a[i];',analysis:'逐个比较更新。'},{prompt:'定义字符串。',answer:'char name[]="C language"; printf("%s",name);',analysis:'%s 输出字符串。'},{prompt:'统计偶数。',answer:'int count=0; for(int i=0;i<n;i++) if(a[i]%2==0) count++;',analysis:'取模判断偶数。'}]}]},
+{name:'函数',points:[{title:'函数定义与参数',explanation:'函数封装可复用逻辑，包含返回类型、名称和参数。',example:{prompt:'定义加法函数。',code:'int add(int a,int b){return a+b;}',analysis:'接收两个参数并返回和。'},exercises:[{prompt:'返回较大值。',answer:'int max(int a,int b){return a>b?a:b;}',analysis:'比较两个参数。'},{prompt:'判断偶数。',answer:'int isEven(int n){return n%2==0;}',analysis:'返回真假值。'},{prompt:'计算平方。',answer:'int square(int n){return n*n;}',analysis:'参数与自身相乘。'}]}]},
+{name:'指针',points:[{title:'地址与指针参数',explanation:'指针保存地址，& 取地址，* 解引用访问目标值。',example:{prompt:'通过指针修改变量。',code:'int value=10; int *p=&value; *p=20;',analysis:'*p 就是 value。'},exercises:[{prompt:'整数增加 5。',answer:'void addFive(int *p){*p+=5;}',analysis:'解引用后修改。'},{prompt:'交换两个整数。',answer:'void swap(int*a,int*b){int t=*a;*a=*b;*b=t;}',analysis:'临时变量完成交换。'},{prompt:'输出变量地址。',answer:'printf("%p",(void*)&value);',analysis:'%p 输出地址。'}]}]},
+{name:'结构体',points:[{title:'结构体定义与访问',explanation:'结构体把多个字段组合成一个对象，点运算符访问字段。',example:{prompt:'定义学生结构体。',code:'struct Student{char name[20];int age;};',analysis:'字段可以是不同类型。'},exercises:[{prompt:'定义 Book。',answer:'struct Book{char title[50];double price;int pages;};',analysis:'定义多个字段。'},{prompt:'输出年龄。',answer:'printf("%d",student.age);',analysis:'点运算符访问字段。'},{prompt:'修改结构体价格。',answer:'bookPtr->price=39.9;',analysis:'结构体指针使用箭头。'}]}]}
 ];
