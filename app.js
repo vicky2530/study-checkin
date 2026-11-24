@@ -38,7 +38,7 @@ var selectedSubject = '全部';
 var checkinHistory = {};
 try { checkinHistory = JSON.parse(localStorage.getItem('checkin-history') || '{}'); } catch (e) { checkinHistory = {}; }
 if (!checkinHistory || Array.isArray(checkinHistory)) checkinHistory = {};
-var baseSubjects = ['全部', '高数', '线代', 'C语言', '英语', 'Python'];
+var baseSubjects = ['全部', '高数', '线代', 'C语言', '英语', 'Python', '语文'];
 var customSubjects = [];
 try { customSubjects = JSON.parse(localStorage.getItem('custom-subjects') || '[]'); } catch (e) { customSubjects = []; }
 if (!Array.isArray(customSubjects)) customSubjects = [];
@@ -128,6 +128,7 @@ document.getElementById('theme-toggle').addEventListener('click', function() {
 var weekday = new Date().getDay();
 function subjectOf(task) {
   var name = task.text || '';
+  if (name.indexOf('语文') !== -1) return '语文';
   if (name.indexOf('高数') !== -1) return '高数';
   if (name.indexOf('线代') !== -1) return '线代';
   if (name.indexOf('C') !== -1) return 'C语言';

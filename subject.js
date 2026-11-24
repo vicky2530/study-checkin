@@ -9,6 +9,8 @@ var fixedTasks = [
   { id: 'task8', text: '本周迷你项目', days: [0, 6] }
 ];
 var subject = new URLSearchParams(window.location.search).get('name') || '高数';
+var moduleNames = ['现代文阅读', '古代诗文阅读', '文言文阅读', '语言文字运用', '名句名篇默写', '写作'];
+var currentModule = new URLSearchParams(window.location.search).get('module');
 var today = new Date();
 function dateText(date) {
   return date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate();
@@ -20,6 +22,7 @@ function mondayOf(date) {
 }
 function subjectOf(task) {
   var name = task.text || '';
+  if (name.indexOf('语文') !== -1) return '语文';
   if (name.indexOf('高数') !== -1) return '高数';
   if (name.indexOf('线代') !== -1) return '线代';
   if (name.indexOf('C') !== -1) return 'C语言';
@@ -56,6 +59,28 @@ if (!priorities || Array.isArray(priorities)) priorities = {};
 var title = document.getElementById('subject-title');
 title.textContent = subject;
 document.title = subject + '学习';
+var moduleEntries = document.getElementById('module-entries');
+if (subject === '语文') {
+  moduleEntries.hidden = false;
+  document.getElementById('subject-content').hidden = !currentModule;
+  moduleEntries.classList.toggle('module-page', !!currentModule);
+  if (currentModule && moduleNames.indexOf(currentModule) !== -1) {
+    title.textContent = currentModule;
+    document.title = currentModule + ' | 语文学习';
+    document.querySelector('.back-link').href = 'subject.html?name=' + encodeURIComponent('语文');
+    document.querySelector('.back-link').textContent = '返回语文';
+    document.getElementById('subject-content').classList.toggle('literary', [1, 2, 4].indexOf(moduleNames.indexOf(currentModule)) !== -1);
+  } else {
+    moduleNames.forEach(function(name, index) {
+      var link = document.createElement('a');
+      link.className = 'module-entry';
+      if ([1, 2, 4].indexOf(index) !== -1) link.classList.add('literary');
+      link.href = 'subject.html?name=' + encodeURIComponent('语文') + '&module=' + encodeURIComponent(name);
+      link.textContent = name;
+      moduleEntries.appendChild(link);
+    });
+  }
+}
 var darkMode = localStorage.getItem('theme-preference') === 'dark';
 document.body.classList.toggle('dark-mode', darkMode);
 var themeButton = document.getElementById('theme-toggle');
@@ -72,11 +97,12 @@ themeButton.addEventListener('click', function() {
   updateTheme();
 });
 function render() {
+  if (subject === '语文' && !currentModule) return;
   var week = weekSelect.value;
   var replaced = customTasks.some(function(task) { return task.week === week && task.replacement; });
   var weekCustom = customTasks.filter(function(task) { return task.week === week && !task.replacement; });
   var tasks = (replaced ? weekCustom : fixedTasks.concat(weekCustom)).filter(function(task) {
-    return subjectOf(task) === subject;
+    return subjectOf(task) === subject && (!currentModule || task.module === currentModule || task.text.indexOf(currentModule) !== -1);
   });
   var doneForWeek = saved.done[week] || {};
   var priorityForWeek = priorities[week] || {};
