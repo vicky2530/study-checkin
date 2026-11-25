@@ -100,10 +100,21 @@ if (moduleNames.length) {
     moduleNames.forEach(function(name) {
       var link = document.createElement('a');
       link.className = 'module-entry';
-      link.href = subject === '地基' && name === 'C语言' ? 'c.html' : 'subject.html?name=' + encodeURIComponent(subject) + '&module=' + encodeURIComponent(name);
+      if (subject === '地基' && name === 'C语言') {
+        link.href = 'c.html';
+      } else {
+        link.href = 'subject.html?name=' + encodeURIComponent(subject) + '&module=' + encodeURIComponent(name);
+      }
       link.textContent = name;
       moduleEntries.appendChild(link);
     });
+    if (subject === '英语四级') {
+      var englishLink = document.createElement('a');
+      englishLink.className = 'module-entry';
+      englishLink.href = 'english.html';
+      englishLink.textContent = '英语四级学习';
+      moduleEntries.appendChild(englishLink);
+    }
   }
 }
 var darkMode = localStorage.getItem('theme-preference') === 'dark';
