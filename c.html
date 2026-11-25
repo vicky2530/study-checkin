@@ -1,11 +1,395 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>C语言学习</title><link rel="stylesheet" href="c.css"></head>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C 语言学习</title>
+<script src="c-lessons.js"></script>
+<style>
+  :root {
+    --primary: #5b6abf;
+    --primary-dark: #4a579e;
+    --primary-light: #e8eaf6;
+    --accent: #7c6bb0;
+    --bg: #f4f5fa;
+    --card: #ffffff;
+    --border: #dfe3f0;
+    --text: #2e3245;
+    --muted: #6b7086;
+    --green: #3f8f6b;
+    --amber: #b07f2e;
+    --red: #b05252;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  header { background: linear-gradient(135deg, #5b6abf, #7c6bb0); color: #fff; padding: 20px 16px; text-align: center; }
+  header h1 { font-size: 22px; letter-spacing: 2px; }
+  header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+  nav.tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+  nav.tabs button { flex: 1; padding: 13px 4px; border: none; background: none; font-size: 15px; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; }
+  nav.tabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: bold; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px 12px 60px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 18px; color: var(--primary-dark); margin-bottom: 6px; }
+  .card h3 { font-size: 16px; margin: 12px 0 6px; color: var(--text); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 20px; margin-right: 6px; }
+  .badge.basic { background: #e3f2e9; color: var(--green); }
+  .badge.mid { background: #fbf1dd; color: var(--amber); }
+  .badge.hard { background: #fbe7e7; color: var(--red); }
+  .badge.src { background: var(--primary-light); color: var(--primary-dark); }
+  .badge.topic { background: #ede9f7; color: var(--accent); }
+  .btn { display: inline-block; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--primary); background: var(--primary); color: #fff; font-size: 14px; cursor: pointer; margin: 4px 6px 4px 0; }
+  .btn:hover { background: var(--primary-dark); }
+  .btn.ghost { background: #fff; color: var(--primary); }
+  .btn.ghost:hover { background: var(--primary-light); }
+  .btn.danger { background: #fff; color: var(--red); border-color: var(--red); }
+  .btn.small { padding: 5px 10px; font-size: 13px; }
+  pre { background: #2e3245; color: #e8eaf6; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.5; margin: 8px 0; white-space: pre-wrap; word-break: break-word; }
+  pre.light { background: #f0f1f8; color: #2e3245; border: 1px solid var(--border); }
+  textarea { width: 100%; min-height: 110px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-family: monospace; font-size: 13px; resize: vertical; }
+  input[type="text"], select { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin: 4px 0 10px; }
+  label { font-size: 13px; color: var(--muted); display: block; margin-top: 8px; }
+  label b { color: var(--red); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .toolbar select, .toolbar input[type="text"] { flex: 1; min-width: 120px; margin: 0; }
+  .topic-head { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .topic-head:hover { color: var(--primary); }
+  .explain-sec { border-left: 3px solid var(--primary-light); padding: 4px 0 4px 12px; margin: 10px 0; }
+  .explain-sec h4 { font-size: 15px; color: var(--primary-dark); margin-bottom: 4px; }
+  .pitfall { background: #fdf6ec; border: 1px solid #f0dfbd; border-radius: 8px; padding: 10px; margin: 8px 0; }
+  .pitfall .note { font-size: 13px; color: #8a6d1f; margin-top: 6px; }
+  .answer-box { display: none; margin-top: 10px; }
+  .answer-box.open { display: block; }
+  .done-mark { color: var(--green); font-weight: bold; font-size: 13px; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(30, 32, 50, 0.5); display: none; align-items: flex-start; justify-content: center; z-index: 50; overflow-y: auto; padding: 20px 10px; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 640px; }
+  .modal h2 { font-size: 18px; margin-bottom: 10px; }
+  .stat { display: inline-block; background: var(--primary-light); color: var(--primary-dark); border-radius: 8px; padding: 6px 12px; font-size: 13px; margin: 0 6px 8px 0; }
+  details { margin: 8px 0; }
+  details summary { cursor: pointer; color: var(--primary); font-size: 14px; }
+  @media (max-width: 600px) {
+    header h1 { font-size: 19px; }
+    .card { padding: 12px; }
+    pre { font-size: 12px; }
+  }
+</style>
+</head>
 <body>
-<a id="back-link" href="subject.html?name=%E5%9C%B0%E5%9F%BA">返回地基</a>
-<header><p>C 语言学习</p><h1 id="page-title">课程模块</h1></header>
-<nav class="c-nav"><a href="c.html">模块地图</a><a href="c.html?view=bank">练习题库</a><a href="c.html?view=errors">错题库</a></nav>
-<main id="course-content"></main>
-<script src="c-lessons.js"></script><script src="c.js"></script>
+<header>
+  <h1>C 语言学习</h1>
+  <p id="overview"></p>
+</header>
+<nav class="tabs">
+  <button id="tab-map" class="active" onclick="switchTab('map')">模块地图</button>
+  <button id="tab-bank" onclick="switchTab('bank')">练习题库</button>
+  <button id="tab-errors" onclick="switchTab('errors')">错题库 <span id="err-count"></span></button>
+</nav>
+<main>
+  <section id="view-map"></section>
+  <section id="view-bank" style="display:none"></section>
+  <section id="view-errors" style="display:none"></section>
+</main>
+
+<div class="modal-bg" id="modal-bg">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<script>
+var DATA = window.C_LESSONS;
+var PROGRESS_KEY = "c-progress";
+var MISTAKES_KEY = "c-mistakes";
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function loadProgress() {
+  try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {}; } catch (e) { return {}; }
+}
+function saveProgress(p) { localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); }
+function loadMistakes() {
+  try {
+    var raw = localStorage.getItem(MISTAKES_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  var seed = JSON.parse(JSON.stringify(DATA.mistakes));
+  localStorage.setItem(MISTAKES_KEY, JSON.stringify(seed));
+  return seed;
+}
+function saveMistakes(list) { localStorage.setItem(MISTAKES_KEY, JSON.stringify(list)); }
+function levelBadge(level) {
+  var cls = level === "基础" ? "basic" : level === "进阶" ? "mid" : "hard";
+  return '<span class="badge ' + cls + '">' + esc(level) + '</span>';
+}
+function findTopic(topicId) {
+  for (var i = 0; i < DATA.modules.length; i++) {
+    var m = DATA.modules[i];
+    for (var j = 0; j < m.topics.length; j++) {
+      if (m.topics[j].id === topicId) return { module: m, topic: m.topics[j] };
+    }
+  }
+  return null;
+}
+function switchTab(tab) {
+  ["map", "bank", "errors"].forEach(function (t) {
+    document.getElementById("tab-" + t).classList.toggle("active", t === tab);
+    document.getElementById("view-" + t).style.display = t === tab ? "" : "none";
+  });
+  if (tab === "map") renderMap();
+  if (tab === "bank") renderBank();
+  if (tab === "errors") renderMistakes();
+}
+
+/* ---------- 模块地图 ---------- */
+function renderMap() {
+  var totalTopics = 0, totalProbs = 0;
+  DATA.modules.forEach(function (m) { totalTopics += m.topics.length; m.topics.forEach(function (t) { totalProbs += t.problems.length; }); });
+  document.getElementById("overview").textContent = "共 " + DATA.modules.length + " 个模块，" + totalTopics + " 个知识点，" + totalProbs + " 道题。完成记录会同步到题库。";
+  var html = "";
+  DATA.modules.forEach(function (m) {
+    html += '<div class="card"><h2>' + esc(m.num) + " " + esc(m.title) + '</h2><p class="muted">' + esc(m.desc) + "</p>";
+    m.topics.forEach(function (t) {
+      html += '<div class="card" style="background:#fafbff"><div class="topic-head" onclick="toggleTopic(\'' + t.id + '\')"><b>' + esc(t.title) + '</b><span class="muted">' + t.problems.length + ' 道题 · 点击展开讲解</span></div>';
+      html += '<div id="topic-' + t.id + '" style="display:none">';
+      html += "<h3>详细讲解</h3>";
+      t.explain.forEach(function (s) {
+        html += '<div class="explain-sec"><h4>' + esc(s.h) + "</h4><p>" + esc(s.b) + "</p>";
+        if (s.code) html += "<pre>" + esc(s.code) + "</pre>";
+        html += "</div>";
+      });
+      html += "<h3>易错点</h3>";
+      t.pitfalls.forEach(function (p) {
+        html += '<div class="pitfall"><div class="muted">错的写法</div><pre class="light">' + esc(p.wrong) + '</pre><div class="muted">对的写法</div><pre class="light">' + esc(p.correct) + '</pre><div class="note">' + esc(p.note) + "</div></div>";
+      });
+      html += "<h3>经典例题：" + esc(t.example.title) + "</h3><pre>" + esc(t.example.code) + "</pre><p>" + esc(t.example.analysis) + "</p>";
+      html += '<button class="btn" onclick="goToBank(\'' + t.id + '\')">去做这节的 5 道题</button>';
+      html += "</div></div>";
+    });
+    html += "</div>";
+  });
+  document.getElementById("view-map").innerHTML = html;
+}
+function toggleTopic(topicId) {
+  var el = document.getElementById("topic-" + topicId);
+  if (el) el.style.display = el.style.display === "none" ? "" : "none";
+}
+function goToBank(topicId) {
+  bankFilter.topic = topicId;
+  switchTab("bank");
+  var sel = document.getElementById("bank-topic");
+  if (sel) sel.value = topicId;
+  renderBank();
+}
+
+/* ---------- 练习题库 ---------- */
+var bankFilter = { topic: "all", level: "all", keyword: "" };
+function renderBank() {
+  var progress = loadProgress();
+  var html = '<div class="toolbar">'
+    + '<select id="bank-topic" onchange="bankFilter.topic=this.value;renderBank()"><option value="all">全部知识点</option>';
+  DATA.modules.forEach(function (m) {
+    m.topics.forEach(function (t) {
+      html += '<option value="' + t.id + '"' + (bankFilter.topic === t.id ? " selected" : "") + ">" + esc(m.title) + " · " + esc(t.title) + "</option>";
+    });
+  });
+  html += '</select>'
+    + '<select onchange="bankFilter.level=this.value;renderBank()">'
+    + '<option value="all"' + (bankFilter.level === "all" ? " selected" : "") + '>全部难度</option>'
+    + '<option value="基础"' + (bankFilter.level === "基础" ? " selected" : "") + '>基础</option>'
+    + '<option value="进阶"' + (bankFilter.level === "进阶" ? " selected" : "") + '>进阶</option>'
+    + '<option value="难题"' + (bankFilter.level === "难题" ? " selected" : "") + '>难题</option>'
+    + '</select>'
+    + '<input type="text" placeholder="按标题搜索" value="' + esc(bankFilter.keyword) + '" oninput="bankFilter.keyword=this.value;renderBankList()"></div>';
+  html += '<div id="bank-list"></div>';
+  document.getElementById("view-bank").innerHTML = html;
+  renderBankList();
+}
+function renderBankList() {
+  var progress = loadProgress();
+  var html = "";
+  var shown = 0;
+  DATA.modules.forEach(function (m) {
+    m.topics.forEach(function (t) {
+      if (bankFilter.topic !== "all" && bankFilter.topic !== t.id) return;
+      var list = t.problems.filter(function (p) {
+        if (bankFilter.level !== "all" && p.level !== bankFilter.level) return false;
+        if (bankFilter.keyword && p.title.indexOf(bankFilter.keyword) === -1 && p.statement.indexOf(bankFilter.keyword) === -1) return false;
+        return true;
+      });
+      if (!list.length) return;
+      html += '<div class="card"><h2>' + esc(m.title) + " · " + esc(t.title) + "</h2>";
+      html += '<button class="btn ghost small" onclick="toggleTopicBank(\'' + t.id + '\')">查看本节讲解 / 易错点 / 例题</button>';
+      html += '<div id="bank-topic-' + t.id + '" style="display:none">';
+      t.explain.forEach(function (s) {
+        html += '<div class="explain-sec"><h4>' + esc(s.h) + "</h4><p>" + esc(s.b) + "</p>";
+        if (s.code) html += "<pre>" + esc(s.code) + "</pre>";
+        html += "</div>";
+      });
+      html += "<h3>易错点</h3>";
+      t.pitfalls.forEach(function (p) {
+        html += '<div class="pitfall"><div class="muted">错的写法</div><pre class="light">' + esc(p.wrong) + '</pre><div class="muted">对的写法</div><pre class="light">' + esc(p.correct) + '</pre><div class="note">' + esc(p.note) + "</div></div>";
+      });
+      html += "<h3>经典例题：" + esc(t.example.title) + "</h3><pre>" + esc(t.example.code) + "</pre><p>" + esc(t.example.analysis) + "</p></div>";
+      list.forEach(function (p) {
+        shown++;
+        var done = progress[p.id] === "correct";
+        html += '<div class="card" style="background:#fafbff"><div><b>' + esc(p.title) + "</b> " + levelBadge(p.level) + '<span class="badge src">' + esc(p.source) + "</span>" + (done ? ' <span class="done-mark">✓ 已做对</span>' : "") + "</div>";
+        html += "<p><b>题面：</b>" + esc(p.statement) + "</p>";
+        html += '<p class="muted">输入说明：' + esc(p.input) + "<br>输出说明：" + esc(p.output) + "</p>";
+        html += "<p><b>输入/输出示例：</b></p><pre class=\"light\">示例输入：" + esc(p.sampleIn) + "\n示例输出：" + esc(p.sampleOut) + "</pre>";
+        html += "<details><summary>思路提示（点开显示）</summary><p>" + esc(p.hint) + "</p></details>";
+        html += '<label>在这里写代码…</label><textarea id="ans-' + p.id + '" placeholder="在这里写代码…"></textarea>';
+        html += '<button class="btn" onclick="toggleAnswer(\'' + p.id + '\')">自查</button>';
+        html += '<button class="btn ghost" onclick="markCorrect(\'' + p.id + '\')">我做对了</button>';
+        html += '<button class="btn danger" onclick="openMistakeForm(\'' + p.id + '\')">我做错了，记入错题库</button>';
+        html += '<div class="answer-box" id="answer-' + p.id + '"><h3>参考答案</h3><pre>' + esc(p.answer) + "</pre><h3>解析</h3><p>" + esc(p.analysis) + "</p></div>";
+        html += "</div>";
+      });
+      html += "</div>";
+    });
+  });
+  if (!shown) html = '<div class="card"><p class="muted">没有符合条件的题目，换个筛选试试。</p></div>';
+  var listEl = document.getElementById("bank-list");
+  if (listEl) listEl.innerHTML = html;
+}
+function toggleTopicBank(topicId) {
+  var el = document.getElementById("bank-topic-" + topicId);
+  if (el) el.style.display = el.style.display === "none" ? "" : "none";
+}
+function toggleAnswer(pid) {
+  var el = document.getElementById("answer-" + pid);
+  if (el) el.classList.toggle("open");
+}
+function markCorrect(pid) {
+  var p = loadProgress();
+  p[pid] = "correct";
+  saveProgress(p);
+  renderBankList();
+}
+function openMistakeForm(pid) {
+  var found = null, topicTitle = "";
+  DATA.modules.forEach(function (m) {
+    m.topics.forEach(function (t) {
+      t.problems.forEach(function (p) {
+        if (p.id === pid) { found = p; topicTitle = m.title + " · " + t.title; }
+      });
+    });
+  });
+  if (!found) return;
+  var myCode = "";
+  var ta = document.getElementById("ans-" + pid);
+  if (ta) myCode = ta.value;
+  openMistakeModal({
+    title: found.title,
+    topic: topicTitle,
+    error: "", understanding: "", detail: "",
+    myCode: myCode,
+    correctCode: found.answer
+  });
+}
+
+/* ---------- 错题库 ---------- */
+var mistakeFilter = "all";
+function renderMistakes() {
+  var list = loadMistakes();
+  var todo = list.filter(function (m) { return m.status !== "已掌握"; }).length;
+  document.getElementById("err-count").textContent = todo ? "(" + todo + ")" : "";
+  var html = '<div class="toolbar">'
+    + '<select onchange="mistakeFilter=this.value;renderMistakes()">'
+    + '<option value="all"' + (mistakeFilter === "all" ? " selected" : "") + '>全部</option>'
+    + '<option value="todo"' + (mistakeFilter === "todo" ? " selected" : "") + '>待复习</option>'
+    + '<option value="done"' + (mistakeFilter === "done" ? " selected" : "") + '>已掌握</option>'
+    + '</select>'
+    + '<button class="btn" onclick="openMistakeModal(null)">手动添加错题</button></div>';
+  var shown = 0;
+  list.forEach(function (m) {
+    if (mistakeFilter === "todo" && m.status === "已掌握") return;
+    if (mistakeFilter === "done" && m.status !== "已掌握") return;
+    shown++;
+    html += '<div class="card"><div class="topic-head" onclick="toggleMistake(\'' + m.id + '\')"><b>' + esc(m.title) + "</b><span class=\"muted\">" + esc(m.topic || "") + " · " + esc(m.date || "") + " · " + (m.status === "已掌握" ? "已掌握" : "待复习") + "</span></div>";
+    html += '<div id="mistake-' + m.id + '" style="display:none">';
+    html += "<p><b>错误本身：</b>" + esc(m.error) + "</p>";
+    html += "<p><b>背后没理解：</b>" + esc(m.understanding) + "</p>";
+    html += "<p><b>详细解析：</b>" + esc(m.detail) + "</p>";
+    html += '<h3>自己初次写的代码</h3><pre>' + esc(m.myCode) + "</pre>";
+    html += '<h3>完全正确的代码</h3><pre>' + esc(m.correctCode) + "</pre>";
+    html += '<button class="btn ghost small" onclick="markMastered(\'' + m.id + '\')">标为已掌握</button>';
+    html += '<button class="btn danger small" onclick="deleteMistake(\'' + m.id + '\')">删除</button>';
+    html += "</div></div>";
+  });
+  if (!shown) html += '<div class="card"><p class="muted">这里没有错题。做错题时点“我做错了，记入错题库”，或者点“手动添加错题”。</p></div>';
+  document.getElementById("view-errors").innerHTML = html;
+}
+function toggleMistake(id) {
+  var el = document.getElementById("mistake-" + id);
+  if (el) el.style.display = el.style.display === "none" ? "" : "none";
+}
+function markMastered(id) {
+  var list = loadMistakes();
+  list.forEach(function (m) { if (m.id === id) m.status = "已掌握"; });
+  saveMistakes(list);
+  renderMistakes();
+}
+function deleteMistake(id) {
+  if (!confirm("确定删除这道错题吗？")) return;
+  var list = loadMistakes().filter(function (m) { return m.id !== id; });
+  saveMistakes(list);
+  renderMistakes();
+}
+function openMistakeModal(prefill) {
+  var d = prefill || { title: "", topic: "", error: "", understanding: "", detail: "", myCode: "", correctCode: "" };
+  var html = "<h2>" + (prefill ? "记入错题库" : "手动添加错题") + "</h2>"
+    + '<p class="muted">三项分析加两段代码都要填，缺一项不能保存。以后每道新错题都按这个格式记。</p>'
+    + '<label>题目 <b>*</b></label><input type="text" id="mf-title" value="' + esc(d.title) + '">'
+    + '<label>所属知识点</label><input type="text" id="mf-topic" value="' + esc(d.topic) + '" placeholder="如：循环">'
+    + '<label>错误本身 <b>*</b></label><textarea id="mf-error" style="min-height:60px">' + esc(d.error) + "</textarea>"
+    + '<label>背后没理解什么 <b>*</b></label><textarea id="mf-understanding" style="min-height:60px">' + esc(d.understanding) + "</textarea>"
+    + '<label>详细解析 <b>*</b></label><textarea id="mf-detail" style="min-height:80px">' + esc(d.detail) + "</textarea>"
+    + '<label>自己初次写的代码 <b>*</b></label><textarea id="mf-mycode">' + esc(d.myCode) + "</textarea>"
+    + '<label>完全正确的代码 <b>*</b></label><textarea id="mf-correct">' + esc(d.correctCode) + "</textarea>"
+    + '<p class="muted" id="mf-tip"></p>'
+    + '<button class="btn" onclick="saveMistakeForm()">保存到错题库</button>'
+    + '<button class="btn ghost" onclick="closeModal()">取消</button>';
+  document.getElementById("modal-box").innerHTML = html;
+  document.getElementById("modal-bg").classList.add("open");
+}
+function saveMistakeForm() {
+  var v = function (id) { return document.getElementById(id).value.trim(); };
+  var title = v("mf-title"), topic = v("mf-topic"), error = v("mf-error"),
+      understanding = v("mf-understanding"), detail = v("mf-detail"),
+      myCode = v("mf-mycode"), correctCode = v("mf-correct");
+  var missing = [];
+  if (!title) missing.push("题目");
+  if (!error) missing.push("错误本身");
+  if (!understanding) missing.push("背后没理解什么");
+  if (!detail) missing.push("详细解析");
+  if (!myCode) missing.push("自己初次写的代码");
+  if (!correctCode) missing.push("完全正确的代码");
+  if (missing.length) {
+    document.getElementById("mf-tip").textContent = "还缺这些没填：" + missing.join("、") + "，填完才能保存。";
+    return;
+  }
+  var list = loadMistakes();
+  list.unshift({
+    id: "user-" + Date.now(),
+    title: title, topic: topic || "手动添加",
+    date: new Date().toISOString().slice(0, 10),
+    status: "待复习",
+    error: error, understanding: understanding, detail: detail,
+    myCode: myCode, correctCode: correctCode
+  });
+  saveMistakes(list);
+  closeModal();
+  switchTab("errors");
+}
+function closeModal() { document.getElementById("modal-bg").classList.remove("open"); }
+document.getElementById("modal-bg").addEventListener("click", function (e) {
+  if (e.target === this) closeModal();
+});
+
+/* ---------- 初始化 ---------- */
+renderMap();
+</script>
 </body>
 </html>
