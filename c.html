@@ -22,9 +22,6 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
-  .app-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--card); border-bottom: 1px solid var(--border); }
-  .app-bar a, .theme-toggle { min-height: 36px; display: inline-flex; align-items: center; padding: 6px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--primary-dark); text-decoration: none; font: inherit; cursor: pointer; }
-  .theme-toggle { width: 38px; justify-content: center; margin-left: auto; font-size: 17px; }
   header { background: linear-gradient(135deg, #5b6abf, #7c6bb0); color: #fff; padding: 20px 16px; text-align: center; }
   header h1 { font-size: 22px; letter-spacing: 2px; }
   header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
@@ -70,13 +67,18 @@
   .modal { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 640px; }
   .modal h2 { font-size: 18px; margin-bottom: 10px; }
   .stat { display: inline-block; background: var(--primary-light); color: var(--primary-dark); border-radius: 8px; padding: 6px 12px; font-size: 13px; margin: 0 6px 8px 0; }
+  .pbar { height: 10px; background: var(--primary-light); border-radius: 6px; overflow: hidden; margin: 8px 0 4px; }
+  .pbar > i { display: block; height: 100%; background: linear-gradient(90deg, #5b6abf, #7c6bb0); border-radius: 6px; }
+  .daily-card { border: 1px solid #c9cfea; background: linear-gradient(180deg, #f2f3fc, #ffffff); }
+  .daily-card h2 { color: var(--primary); }
+  .cheat-sec { margin-bottom: 20px; }
+  .cheat-sec code { font-family: monospace; background: #f0f1f8; padding: 0 4px; border-radius: 4px; }
+  table.cheat { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+  table.cheat th, table.cheat td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+  table.cheat th { background: var(--primary-light); color: var(--primary-dark); }
+  table.cheat td code { font-family: monospace; background: #f0f1f8; padding: 0 4px; border-radius: 4px; }
   details { margin: 8px 0; }
   details summary { cursor: pointer; color: var(--primary); font-size: 14px; }
-  body.dark-mode { --bg: #25263a; --card: #303148; --border: #505477; --text: #e7e8f5; --muted: #b8bad2; --primary: #aeb3e6; --primary-dark: #d5d6f2; --primary-light: #414365; }
-  body.dark-mode .btn.ghost, body.dark-mode .btn.danger, body.dark-mode input, body.dark-mode select, body.dark-mode textarea { background: #25263a; color: #e7e8f5; }
-  body.dark-mode .card[style] { background: #2b2d43 !important; }
-  body.dark-mode pre.light { background: #25263a; color: #e7e8f5; }
-  body.dark-mode .modal { background: var(--card); }
   @media (max-width: 600px) {
     header h1 { font-size: 19px; }
     .card { padding: 12px; }
@@ -85,11 +87,6 @@
 </style>
 </head>
 <body>
-<div class="app-bar" aria-label="页面导航">
-  <a href="subject.html?name=%E5%9C%B0%E5%9F%BA">返回地基</a>
-  <a href="index.html">返回打卡页</a>
-  <button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换深色模式" title="切换深色模式">月</button>
-</div>
 <header>
   <h1>C 语言学习</h1>
   <p id="overview"></p>
@@ -99,12 +96,14 @@
   <button id="tab-bank" onclick="switchTab('bank')">练习题库</button>
   <button id="tab-errors" onclick="switchTab('errors')">错题库 <span id="err-count"></span></button>
   <button id="tab-prompt" onclick="switchTab('prompt')">提示词</button>
+  <button id="tab-cheat" onclick="switchTab('cheat')">速查表</button>
 </nav>
 <main>
   <section id="view-map"></section>
   <section id="view-bank" style="display:none"></section>
   <section id="view-errors" style="display:none"></section>
   <section id="view-prompt" style="display:none"></section>
+  <section id="view-cheat" style="display:none"></section>
 </main>
 
 <div class="modal-bg" id="modal-bg">
@@ -115,20 +114,6 @@
 var DATA = window.C_LESSONS;
 var PROGRESS_KEY = "c-progress";
 var MISTAKES_KEY = "c-mistakes";
-var darkMode = localStorage.getItem('theme-preference') === 'dark';
-var themeToggle = document.getElementById('theme-toggle');
-function applyTheme() {
-  document.body.classList.toggle('dark-mode', darkMode);
-  themeToggle.textContent = darkMode ? '日' : '月';
-  themeToggle.setAttribute('aria-label', darkMode ? '切换浅色模式' : '切换深色模式');
-  themeToggle.title = darkMode ? '切换浅色模式' : '切换深色模式';
-}
-themeToggle.addEventListener('click', function () {
-  darkMode = !darkMode;
-  localStorage.setItem('theme-preference', darkMode ? 'dark' : 'light');
-  applyTheme();
-});
-applyTheme();
 
 function esc(s) {
   return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -161,7 +146,7 @@ function findTopic(topicId) {
   return null;
 }
 function switchTab(tab) {
-  ["map", "bank", "errors", "prompt"].forEach(function (t) {
+  ["map", "bank", "errors", "prompt", "cheat"].forEach(function (t) {
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
     document.getElementById("view-" + t).style.display = t === tab ? "" : "none";
   });
@@ -169,16 +154,22 @@ function switchTab(tab) {
   if (tab === "bank") renderBank();
   if (tab === "errors") renderMistakes();
   if (tab === "prompt") renderPrompt();
+  if (tab === "cheat") renderCheat();
 }
 
 /* ---------- 模块地图 ---------- */
 function renderMap() {
-  var totalTopics = 0, totalProbs = 0;
-  DATA.modules.forEach(function (m) { totalTopics += m.topics.length; m.topics.forEach(function (t) { totalProbs += t.problems.length; }); });
-  document.getElementById("overview").textContent = "共 " + DATA.modules.length + " 个模块，" + totalTopics + " 个知识点，" + totalProbs + " 道题。完成记录会同步到题库。";
+  var totalTopics = 0, totalProbs = 0, doneTotal = 0;
+  var prog = loadProgress();
+  DATA.modules.forEach(function (m) { totalTopics += m.topics.length; m.topics.forEach(function (t) { totalProbs += t.problems.length; t.problems.forEach(function (p) { if (prog[p.id] === "correct") doneTotal++; }); }); });
+  updateOverview(doneTotal, totalProbs);
   var html = "";
+  html += dailyCardHtml(prog);
+  html += progressBarHtml(doneTotal, totalProbs);
   DATA.modules.forEach(function (m) {
-    html += '<div class="card"><h2>' + esc(m.num) + " " + esc(m.title) + '</h2><p class="muted">' + esc(m.desc) + "</p>";
+    var mTotal = 0, mDone = 0;
+    m.topics.forEach(function (t) { t.problems.forEach(function (p) { mTotal++; if (prog[p.id] === "correct") mDone++; }); });
+    html += '<div class="card"><h2>' + esc(m.num) + " " + esc(m.title) + '</h2><p class="muted">' + esc(m.desc) + " · 本模块已做对 " + mDone + " / " + mTotal + " 道</p>";
     m.topics.forEach(function (t) {
       html += '<div class="card" style="background:#fafbff"><div class="topic-head" onclick="toggleTopic(\'' + t.id + '\')"><b>' + esc(t.title) + '</b><span class="muted">' + t.problems.length + ' 道题 · 点击展开讲解</span></div>';
       html += '<div id="topic-' + t.id + '" style="display:none">';
@@ -210,6 +201,63 @@ function goToBank(topicId) {
   var sel = document.getElementById("bank-topic");
   if (sel) sel.value = topicId;
   renderBank();
+}
+
+/* ---------- 进度 / 每日一题 ---------- */
+function updateOverview(done, total) {
+  var totalTopics = 0;
+  DATA.modules.forEach(function (m) { totalTopics += m.topics.length; });
+  document.getElementById("overview").textContent = "共 " + DATA.modules.length + " 个模块，" + totalTopics + " 个知识点，" + total + " 道题，已做对 " + done + " / " + total + " 道。完成记录会同步到题库。";
+}
+function progressBarHtml(done, total) {
+  var pct = total ? Math.round(done / total * 100) : 0;
+  return '<div class="card"><h2>做题进度</h2><p class="muted">已做对 ' + done + ' / ' + total + ' 道（' + pct + '%）</p><div class="pbar"><i style="width:' + pct + '%"></i></div></div>';
+}
+function dailyProblem() {
+  var pool = [];
+  DATA.modules.forEach(function (m) {
+    m.topics.forEach(function (t) {
+      t.problems.forEach(function (p) {
+        if (p.level === "基础" || p.level === "进阶") pool.push({ module: m, topic: t, problem: p });
+      });
+    });
+  });
+  var now = new Date();
+  var dayNum = Math.floor(now.getTime() / 86400000);
+  var idx = ((dayNum % pool.length) + pool.length) % pool.length;
+  var pick = pool[idx];
+  pick.dateStr = now.getFullYear() + "年" + (now.getMonth() + 1) + "月" + now.getDate() + "日";
+  return pick;
+}
+function dailyCardHtml(prog) {
+  var d = dailyProblem();
+  var p = d.problem;
+  return '<div class="card daily-card"><h2>今日一题 · ' + esc(d.dateStr) + '</h2>'
+    + '<p><b>' + esc(p.title) + '</b> ' + levelBadge(p.level) + '<span class="badge topic">' + esc(d.module.title) + ' · ' + esc(d.topic.title) + '</span>' + (prog[p.id] === "correct" ? ' <span class="done-mark">✓ 已做对</span>' : "") + '</p>'
+    + '<p>' + esc(p.statement) + '</p>'
+    + '<button class="btn" onclick="goToDaily(\'' + p.id + '\')">去做这道题</button></div>';
+}
+function findProblem(pid) {
+  for (var i = 0; i < DATA.modules.length; i++) {
+    var m = DATA.modules[i];
+    for (var j = 0; j < m.topics.length; j++) {
+      var t = m.topics[j];
+      for (var k = 0; k < t.problems.length; k++) {
+        if (t.problems[k].id === pid) return { module: m, topic: t, problem: t.problems[k] };
+      }
+    }
+  }
+  return null;
+}
+function goToDaily(pid) {
+  var found = findProblem(pid);
+  if (!found) return;
+  bankFilter.topic = found.topic.id;
+  bankFilter.level = "all";
+  bankFilter.keyword = "";
+  switchTab("bank");
+  var ta = document.getElementById("ans-" + pid);
+  if (ta) ta.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 /* ---------- 练习题库 ---------- */
@@ -296,6 +344,7 @@ function markCorrect(pid) {
   p[pid] = "correct";
   saveProgress(p);
   renderBankList();
+  renderMap();
 }
 function openMistakeForm(pid) {
   var found = null, topicTitle = "";
@@ -325,7 +374,8 @@ function renderMistakes() {
   var list = loadMistakes();
   var todo = list.filter(function (m) { return m.status !== "已掌握"; }).length;
   document.getElementById("err-count").textContent = todo ? "(" + todo + ")" : "";
-  var html = '<div class="toolbar">'
+  var html = reviewHtml(list);
+  html += '<div class="toolbar">'
     + '<select onchange="mistakeFilter=this.value;renderMistakes()">'
     + '<option value="all"' + (mistakeFilter === "all" ? " selected" : "") + '>全部</option>'
     + '<option value="todo"' + (mistakeFilter === "todo" ? " selected" : "") + '>待复习</option>'
@@ -353,6 +403,36 @@ function renderMistakes() {
 }
 function toggleMistake(id) {
   var el = document.getElementById("mistake-" + id);
+  if (el) el.style.display = el.style.display === "none" ? "" : "none";
+}
+function reviewHtml(list) {
+  var review = list.filter(function (m) { return m.status !== "已掌握"; }).slice().sort(function (a, b) {
+    var da = String(a.date || ""), db = String(b.date || "");
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
+  var html = '<div class="card"><h2>今日待复习</h2>';
+  if (!review.length) {
+    html += '<p class="muted">今天没有待复习的错题，全部都掌握了，继续保持！</p>';
+  } else {
+    html += '<p class="muted">还剩 ' + review.length + ' 道没复习，按日期排，最早的在上面。点一道展开看三项分析和两段代码，复习完点“标为已掌握”，它就从这里消失。</p>';
+    review.forEach(function (m) {
+      html += '<div class="card" style="background:#fafbff"><div class="topic-head" onclick="toggleReview(\'' + m.id + '\')"><b>' + esc(m.title) + '</b><span class="muted">' + esc(m.topic || "") + ' · ' + esc(m.date || "") + '</span></div>';
+      html += '<div id="review-' + m.id + '" style="display:none">';
+      html += "<p><b>错误本身：</b>" + esc(m.error) + "</p>";
+      html += "<p><b>背后没理解：</b>" + esc(m.understanding) + "</p>";
+      html += "<p><b>详细解析：</b>" + esc(m.detail) + "</p>";
+      html += '<h3>自己初次写的代码</h3><pre>' + esc(m.myCode) + "</pre>";
+      html += '<h3>完全正确的代码</h3><pre>' + esc(m.correctCode) + "</pre>";
+      html += '<button class="btn ghost small" onclick="markMastered(\'' + m.id + '\')">标为已掌握</button>';
+      html += '<button class="btn danger small" onclick="deleteMistake(\'' + m.id + '\')">删除</button>';
+      html += "</div></div>";
+    });
+  }
+  html += "</div>";
+  return html;
+}
+function toggleReview(id) {
+  var el = document.getElementById("review-" + id);
   if (el) el.style.display = el.style.display === "none" ? "" : "none";
 }
 function markMastered(id) {
@@ -434,7 +514,13 @@ var PROMPT_TEXT = [
 "",
 "页面从主页面点“地基”里的“C语言”进入，页面上有返回按钮。低饱和蓝紫配色，代码用等宽字体，代码块深色底。",
 "",
-"做完测一下：点 C语言进学习页，7 个模块、22 个知识点都在；随机点 3 个知识点，讲解、易错点、例题、练习题都显示完整；随机点 2 道题的自查按钮，能看到参考答案；错题库里 7 道错题都在，新增一道错题刷新后还在。测完提交并推送到 GitHub，提交信息写“学习打卡主页：C语言学习内容完整版”，推失败就先放本地，等网络好了再推。"
+"做完测一下：点 C语言进学习页，7 个模块、22 个知识点都在；随机点 3 个知识点，讲解、易错点、例题、练习题都显示完整；随机点 2 道题的自查按钮，能看到参考答案；错题库里 7 道错题都在，新增一道错题刷新后还在。测完提交并推送到 GitHub，提交信息写“学习打卡主页：C语言学习内容完整版”，推失败就先放本地，等网络好了再推。",
+"",
+"页面上还要有这 4 个功能：",
+"1. 做题进度统计：模块地图顶部有一条总进度条（做对题数/110），每个模块卡片上显示该模块做对了几道、共几道，数字跟着“我做对了”实时变。",
+"2. 错题复习提醒：错题库顶部有“今日待复习”区，列出还没掌握的错题（按日期排），显示还剩几道；点一道展开看三项分析和两段代码，点“标为已掌握”就从待复习里消失。",
+"3. 速查表页签：printf/scanf 格式、循环模板、if/else 模板、常用函数、运算符优先级、常见报错速查，内容要准、要简短，一页能查完。",
+"4. 每日一题：模块地图顶部一张“今日一题”卡片，每天按日期固定推荐一道题（从基础和进阶题里按日期轮换，同一天所有人看到同一道，第二天换一道），卡片显示题面和难度，点“去做这道题”跳到题库里那道题的位置。"
 ].join("\n");
 function renderPrompt() {
   var html = '<div class="card"><h2>给 Codex 的提示词</h2>'
@@ -456,6 +542,56 @@ function copyPrompt() {
     try { document.execCommand("copy"); done(); } catch (e) {}
     document.body.removeChild(ta);
   }
+}
+
+/* ---------- 速查表 ---------- */
+function renderCheat() {
+  var html = '<div class="card"><h2>C 语言速查表</h2><p class="muted">写代码卡住时随手查，不用翻回去找讲解。</p></div>'
+  + '<div class="card cheat-sec"><h3>printf / scanf 常用格式</h3>'
+  + '<table class="cheat"><tr><th>格式</th><th>意思</th><th>注意</th></tr>'
+  + '<tr><td><code>%d</code></td><td>整数 int</td><td>最常用</td></tr>'
+  + '<tr><td><code>%f</code></td><td>小数 float</td><td>默认显示 6 位小数</td></tr>'
+  + '<tr><td><code>%.2f</code></td><td>保留 2 位小数</td><td>数字可改，如 %.1f、%.3f</td></tr>'
+  + '<tr><td><code>%lf</code></td><td>double</td><td>scanf 读 double 用 %lf；printf 用 %f 就行</td></tr>'
+  + '<tr><td><code>%c</code></td><td>一个字符 char</td><td>读字符会读到空格和换行，小心</td></tr>'
+  + '<tr><td><code>%s</code></td><td>字符串（字符数组）</td><td>遇到空格就停</td></tr>'
+  + '<tr><td><code>%%</code></td><td>输出一个 %</td><td>想打印 % 本身就写两个</td></tr>'
+  + '<tr><td><code>%o</code> / <code>%x</code></td><td>八进制 / 十六进制</td><td>少用，知道就行</td></tr>'
+  + '</table><p><b>scanf 一定记得加 &amp;：</b><code>scanf("%d", &amp;n);</code> 字符数组名本身就是地址，不加 &amp;，如 <code>scanf("%s", name);</code></p></div>'
+  + '<div class="card cheat-sec"><h3>循环模板（直接抄）</h3>'
+  + '<p><b>for（次数已知时用）：</b></p><pre>for (int i = 1; i &lt;= n; i++) {\n    // 循环体\n}</pre>'
+  + '<p><b>while（条件循环）：</b></p><pre>int i = 1;\nwhile (i &lt;= n) {\n    // 循环体\n    i++;   // 别忘更新，不然死循环\n}</pre>'
+  + '<p><b>do-while（至少执行一次）：</b></p><pre>int i = 1;\ndo {\n    // 循环体\n    i++;\n} while (i &lt;= n);   // 最后有个分号</pre></div>'
+  + '<div class="card cheat-sec"><h3>if / else 模板</h3>'
+  + '<pre>if (条件) {\n    // 条件成立做这个\n} else if (条件) {\n    // 上面不成立、这个成立做这个\n} else {\n    // 都不成立做这个\n}</pre>'
+  + '<p>条件里是 <code>==</code> 不是 <code>=</code>；多个条件用 <code>&amp;&amp;</code>（并且）、<code>||</code>（或者）。</p></div>'
+  + '<div class="card cheat-sec"><h3>常用函数</h3>'
+  + '<table class="cheat"><tr><th>函数</th><th>作用</th><th>头文件</th></tr>'
+  + '<tr><td><code>strlen(s)</code></td><td>字符串长度（不含 \\0）</td><td>string.h</td></tr>'
+  + '<tr><td><code>strcpy(a, b)</code></td><td>把 b 复制到 a</td><td>string.h</td></tr>'
+  + '<tr><td><code>strcmp(a, b)</code></td><td>比较字符串，相等返回 0</td><td>string.h</td></tr>'
+  + '<tr><td><code>sqrt(x)</code></td><td>开平方</td><td>math.h（编译加 -lm）</td></tr>'
+  + '<tr><td><code>pow(x, y)</code></td><td>x 的 y 次方</td><td>math.h（编译加 -lm）</td></tr>'
+  + '<tr><td><code>abs(x)</code></td><td>整数绝对值</td><td>stdlib.h</td></tr>'
+  + '<tr><td><code>fabs(x)</code></td><td>小数绝对值</td><td>math.h</td></tr>'
+  + '<tr><td><code>rand()</code></td><td>随机数，先 <code>srand(time(0))</code></td><td>stdlib.h / time.h</td></tr>'
+  + '<tr><td><code>toupper(c)</code> / <code>tolower(c)</code></td><td>转大写 / 转小写</td><td>ctype.h</td></tr>'
+  + '</table></div>'
+  + '<div class="card cheat-sec"><h3>运算符优先级（从高到低）</h3>'
+  + '<p><code>()</code> 最高 → <code>!</code>、负号、<code>++</code>、<code>--</code> → <code>*</code> <code>/</code> <code>%</code> → <code>+</code> <code>-</code> → <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code> → <code>==</code> <code>!=</code> → <code>&amp;&amp;</code> → <code>||</code> → <code>=</code> 最低。</p>'
+  + '<p>一句话：先乘除后加减，先括号后其他；赋值 <code>=</code> 优先级最低，<code>a = b + 1</code> 是先算 b+1 再赋值。不确定就加括号，别靠背。</p></div>'
+  + '<div class="card cheat-sec"><h3>常见报错速查</h3>'
+  + '<table class="cheat"><tr><th>报错 / 现象</th><th>原因</th><th>怎么改</th></tr>'
+  + '<tr><td>expected \';\' before ...</td><td>少了分号</td><td>看报错那一行的上一行，末尾加 <code>;</code></td></tr>'
+  + '<tr><td>\'x\' undeclared / was not declared</td><td>变量没声明，或声明在花括号里、出了作用域</td><td>使用前先声明，如 <code>int x;</code>；别在循环里声明、外面用</td></tr>'
+  + '<tr><td>一运行就崩 / 段错误</td><td>scanf 忘了 &amp;，或数组下标越界</td><td><code>scanf("%d", &amp;n);</code> 检查下标别超过数组长度</td></tr>'
+  + '<tr><td>输出全是 0 或乱码</td><td>变量没初始化就用了</td><td>定义时给初值，如 <code>int sum = 0;</code></td></tr>'
+  + '<tr><td>条件永远成立 / 不成立</td><td>把 <code>==</code> 写成 <code>=</code></td><td>比较用 <code>==</code>，赋值用 <code>=</code></td></tr>'
+  + '<tr><td><code>5 / 2</code> 结果是 2</td><td>整数除法丢小数</td><td>要小数写 <code>5.0 / 2</code> 或 <code>(double)5 / 2</code></td></tr>'
+  + '<tr><td>死循环停不下来</td><td>while 里忘了更新循环变量</td><td>循环体里记得 <code>i++</code> 或改变条件</td></tr>'
+  + '<tr><td>expected \'}\' / 括号不匹配</td><td>花括号少了或多了</td><td>从内往外数括号；VS Code 里点一下括号看配对</td></tr>'
+  + '</table></div>';
+  document.getElementById("view-cheat").innerHTML = html;
 }
 
 /* ---------- 初始化 ---------- */
