@@ -22,9 +22,6 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
-  .app-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--card); border-bottom: 1px solid var(--border); }
-  .app-bar a, .theme-toggle { min-height: 36px; display: inline-flex; align-items: center; padding: 6px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--primary-dark); text-decoration: none; font: inherit; cursor: pointer; }
-  .theme-toggle { width: 38px; justify-content: center; margin-left: auto; font-size: 17px; }
   header { background: linear-gradient(135deg, #5b6abf, #7c6bb0); color: #fff; padding: 20px 16px; text-align: center; }
   header h1 { font-size: 22px; letter-spacing: 2px; }
   header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
@@ -72,11 +69,6 @@
   .stat { display: inline-block; background: var(--primary-light); color: var(--primary-dark); border-radius: 8px; padding: 6px 12px; font-size: 13px; margin: 0 6px 8px 0; }
   details { margin: 8px 0; }
   details summary { cursor: pointer; color: var(--primary); font-size: 14px; }
-  body.dark-mode { --bg: #25263a; --card: #303148; --border: #505477; --text: #e7e8f5; --muted: #b8bad2; --primary: #aeb3e6; --primary-dark: #d5d6f2; --primary-light: #414365; }
-  body.dark-mode .btn.ghost, body.dark-mode .btn.danger, body.dark-mode input, body.dark-mode select, body.dark-mode textarea { background: #25263a; color: #e7e8f5; }
-  body.dark-mode .card[style] { background: #2b2d43 !important; }
-  body.dark-mode pre.light { background: #25263a; color: #e7e8f5; }
-  body.dark-mode .modal { background: var(--card); }
   @media (max-width: 600px) {
     header h1 { font-size: 19px; }
     .card { padding: 12px; }
@@ -85,11 +77,6 @@
 </style>
 </head>
 <body>
-<div class="app-bar" aria-label="页面导航">
-  <a href="subject.html?name=%E5%9C%B0%E5%9F%BA">返回地基</a>
-  <a href="index.html">返回打卡页</a>
-  <button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换深色模式" title="切换深色模式">月</button>
-</div>
 <header>
   <h1>C 语言学习</h1>
   <p id="overview"></p>
@@ -98,11 +85,13 @@
   <button id="tab-map" class="active" onclick="switchTab('map')">模块地图</button>
   <button id="tab-bank" onclick="switchTab('bank')">练习题库</button>
   <button id="tab-errors" onclick="switchTab('errors')">错题库 <span id="err-count"></span></button>
+  <button id="tab-prompt" onclick="switchTab('prompt')">提示词</button>
 </nav>
 <main>
   <section id="view-map"></section>
   <section id="view-bank" style="display:none"></section>
   <section id="view-errors" style="display:none"></section>
+  <section id="view-prompt" style="display:none"></section>
 </main>
 
 <div class="modal-bg" id="modal-bg">
@@ -111,20 +100,6 @@
 
 <script>
 var DATA = window.C_LESSONS;
-var darkMode = localStorage.getItem('theme-preference') === 'dark';
-var themeToggle = document.getElementById('theme-toggle');
-function applyTheme() {
-  document.body.classList.toggle('dark-mode', darkMode);
-  themeToggle.textContent = darkMode ? '日' : '月';
-  themeToggle.setAttribute('aria-label', darkMode ? '切换浅色模式' : '切换深色模式');
-  themeToggle.title = darkMode ? '切换浅色模式' : '切换深色模式';
-}
-themeToggle.addEventListener('click', function () {
-  darkMode = !darkMode;
-  localStorage.setItem('theme-preference', darkMode ? 'dark' : 'light');
-  applyTheme();
-});
-applyTheme();
 var PROGRESS_KEY = "c-progress";
 var MISTAKES_KEY = "c-mistakes";
 
@@ -159,13 +134,14 @@ function findTopic(topicId) {
   return null;
 }
 function switchTab(tab) {
-  ["map", "bank", "errors"].forEach(function (t) {
+  ["map", "bank", "errors", "prompt"].forEach(function (t) {
     document.getElementById("tab-" + t).classList.toggle("active", t === tab);
     document.getElementById("view-" + t).style.display = t === tab ? "" : "none";
   });
   if (tab === "map") renderMap();
   if (tab === "bank") renderBank();
   if (tab === "errors") renderMistakes();
+  if (tab === "prompt") renderPrompt();
 }
 
 /* ---------- 模块地图 ---------- */
@@ -414,6 +390,46 @@ function closeModal() { document.getElementById("modal-bg").classList.remove("op
 document.getElementById("modal-bg").addEventListener("click", function (e) {
   if (e.target === this) closeModal();
 });
+
+/* ---------- 提示词 ---------- */
+var PROMPT_TEXT = [
+"请按下面的规格，在学习打卡主页项目里做一个完整的 C 语言学习页面（c.html + c-lessons.js），内容照《C 语言学习》Word 文档，不要自己简化、不要缩写讲解：",
+"",
+"一共 7 个模块：基础入门、条件判断、循环、数组、函数、指针、结构体。每个模块下面是知识点，一共 22 个知识点。每个知识点点进去显示四部分：",
+"1. 详细讲解：按文档里写的讲，不要缩成一句话；每节分小节讲，每节有标题、详细文字（多句、分步骤讲清楚）、配套代码；执行过程一步一步列出来，变量每轮怎么变要写清楚。",
+"2. 易错点：单独一块列出来，文档里每个知识点的易错点都要有；每条写清错的写法、对的写法和为什么错，优先覆盖用户真实错过的点。",
+"3. 经典例题：带完整代码和解析。",
+"4. 练习题库：每个知识点 5 道题（基础 2 道、进阶 2 道、难题 1 道），一共 110 道题。每道题有题面、输入说明、输出说明、输入/输出示例、思路提示、参考答案、解析、难度、题源；难题要综合多个知识点。每道题有一个写代码的答题框和一个“自查”按钮，点一下显示这道题的参考答案和解析；还有“我做对了”和“我做错了，记入错题库”两个按钮。AI 判分现在不做，等后端和第一次 API 调用跑通后再加，自查先对参考答案。",
+"",
+"另外单独做一个错题库页面：先把已有的 7 道真实错题放进去，每道写清三项：错误本身是什么、背后还没理解什么、详细解析；还要显示自己初次写的代码（在上面）和完全正确的代码（在下面）。页面上能手动添加错题，添加时三项分析和两段代码都是必填，缺一项不能保存。错题存在 localStorage，刷新不丢。",
+"",
+"数据只用 localStorage 的 c-progress 和 c-mistakes 这两个 key，别动主页已有的 localStorage key（checkin、custom-tasks、task-priorities、checkin-history 等），别弄坏主页面的其他功能。",
+"",
+"页面从主页面点“地基”里的“C语言”进入，页面上有返回按钮。低饱和蓝紫配色，代码用等宽字体，代码块深色底。",
+"",
+"做完测一下：点 C语言进学习页，7 个模块、22 个知识点都在；随机点 3 个知识点，讲解、易错点、例题、练习题都显示完整；随机点 2 道题的自查按钮，能看到参考答案；错题库里 7 道错题都在，新增一道错题刷新后还在。测完提交并推送到 GitHub，提交信息写“学习打卡主页：C语言学习内容完整版”，推失败就先放本地，等网络好了再推。"
+].join("\n");
+function renderPrompt() {
+  var html = '<div class="card"><h2>给 Codex 的提示词</h2>'
+    + '<p class="muted">下面这一整段直接复制，发给 Codex，就能在学习打卡主页项目里按这个页面的规格做出 C 语言学习页面。</p>'
+    + '<button class="btn" onclick="copyPrompt()">复制提示词</button> <span class="muted" id="prompt-tip"></span>'
+    + '<pre class="light" style="white-space:pre-wrap">' + esc(PROMPT_TEXT) + "</pre></div>";
+  document.getElementById("view-prompt").innerHTML = html;
+}
+function copyPrompt() {
+  var done = function () { var t = document.getElementById("prompt-tip"); if (t) t.textContent = "已复制，去 Codex 粘贴就行。"; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(PROMPT_TEXT).then(done, function () { fallbackCopy(); });
+  } else { fallbackCopy(); }
+  function fallbackCopy() {
+    var ta = document.createElement("textarea");
+    ta.value = PROMPT_TEXT;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+}
 
 /* ---------- 初始化 ---------- */
 renderMap();
