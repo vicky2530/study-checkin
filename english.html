@@ -17,9 +17,11 @@
 <script src="eng-matching-basic.js"></script>
 <script src="eng-matching-advanced.js"></script>
 <script src="eng-matching-real.js"></script>
-<script src="eng-dict.js"></script>
 <script src="eng-lessons.js"></script>
 <script src="eng-translation.js"></script>
+<script src="eng-writing-mock.js"></script>
+<script src="eng-writing-real.js"></script>
+<script src="eng-writing-topics.js"></script>
 <style>
   :root {
     --primary: #5b6abf;
@@ -115,13 +117,6 @@
   .pen-toolbar button { padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; color: var(--muted); cursor: pointer; }
   .pen-toolbar button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
   .passage { font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.9; }
-  .passage-wrap { position: relative; }
-  .draw-layer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 2; touch-action: none; }
-  .draw-layer.active { pointer-events: auto; cursor: crosshair; }
-  .draw-stroke { fill: none; stroke: #696eae; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-  .dict-detail { margin: 12px 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--primary-light); }
-  .dict-detail h3 { margin: 0 0 6px; font-size: 15px; color: var(--primary-dark); }
-  .dict-detail p { margin: 5px 0; }
   .passage p { margin-bottom: 12px; }
   .ep-list { display: flex; flex-direction: column; gap: 6px; }
   .ep-item { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
@@ -244,49 +239,11 @@ function buildDict() {
       if (k && !LOCAL_DICT[k]) LOCAL_DICT[k] = { pos: ws[i].pos, meaning: ws[i].meaning, phon: ws[i].phon };
     }
   }
-  var corpus = window.ENG_CORPUS_DICT || {};
-  Object.keys(corpus).forEach(function (key) { LOCAL_DICT[key] = corpus[key]; });
   return LOCAL_DICT;
 }
 function lookupLocal(word) {
   var d = buildDict();
   return d[String(word || "").toLowerCase()] || null;
-}
-function wordExtension(word, hit) {
-  var lower = String(word || "").toLowerCase();
-  var pos = String(hit && hit.pos || "");
-  var family = [];
-  if (/ing$/.test(lower)) family.push(lower.replace(/ing$/, ""));
-  if (/ed$/.test(lower)) family.push(lower.replace(/ed$/, ""));
-  if (/s$/.test(lower) && lower.length > 3) family.push(lower.replace(/s$/, ""));
-  var usage = pos.indexOf("v.") >= 0 ? "常用于描述动作、变化或状态。" : pos.indexOf("adj.") >= 0 ? "常放在名词前作定语，或放在系动词后作表语。" : pos.indexOf("adv.") >= 0 ? "常用来修饰动词、形容词或整句话。" : "注意它在句子中的搭配和上下文含义。";
-  var example = pos.indexOf("v.") >= 0 ? "We often " + lower + " new ideas through practice." : pos.indexOf("adj.") >= 0 ? "This is a very " + lower + " example." : pos.indexOf("adv.") >= 0 ? "She explained the idea " + lower + "." : "The word “" + lower + "” appears in this passage.";
-  return { usage: usage, family: family, example: example };
-}
-function clickedWordContext() {
-  var target = window.event && window.event.currentTarget;
-  var passage = target && target.closest ? target.closest(".passage") : null;
-  return passage ? passage.innerText.trim() : "";
-}
-function wordCardHTML(word, hit) {
-  var html = '<h2>' + esc(word) + "</h2>";
-  if (!hit) {
-    html += '<p class="muted">暂未收录该词条，可以先听读音或打开有道词典查看完整释义与例句。</p>';
-    html += '<a class="btn ghost" target="_blank" rel="noopener" href="https://dict.youdao.com/result?word=' + encodeURIComponent(word) + '">去有道查词</a> ';
-    html += '<button class="btn" data-word="' + esc(word) + '" onclick="speakWordTwice(this.dataset.word)">播放读音</button>';
-    return html;
-  }
-  var ext = wordExtension(word, hit);
-  var context = clickedWordContext();
-  html += '<p><span class="muted">' + esc(hit.phon || "音标可通过读音按钮跟读") + '</span></p>';
-  html += '<p><b>' + esc(hit.pos || "词性") + '</b> ' + esc(hit.meaning || "") + "</p>";
-  html += '<div class="dict-detail"><h3>用法延伸</h3><p>' + esc(ext.usage) + "</p>";
-  if (ext.family.length) html += '<p><b>词形提示：</b>' + esc(ext.family.join(" / ")) + "</p>";
-  if (context) html += '<h3>原文例句</h3><p>' + esc(context) + '</p><button class="btn ghost small" data-speak="' + esc(context) + '" onclick="speakText(this.dataset.speak,0.72)">朗读原文</button>';
-  html += '<h3>例句</h3><p>' + esc(ext.example) + '</p><button class="btn ghost small" data-speak="' + esc(ext.example) + '" onclick="speakText(this.dataset.speak,0.72)">朗读例句</button></div>';
-  html += '<button class="btn" data-word="' + esc(word) + '" onclick="speakWordTwice(this.dataset.word)">播放单词</button> ';
-  html += '<a class="btn ghost" target="_blank" rel="noopener" href="https://dict.youdao.com/result?word=' + encodeURIComponent(word) + '">更多释义与例句</a>';
-  return html;
 }
 
 /* ============ 错词库 ============ */
@@ -471,24 +428,8 @@ function setMatchingEpisodeMarks(edition, episode, marks) {
 function countMatchingMarks(edition, episode) {
   var marks = getMatchingEpisodeMarks(edition, episode);
   var n = 0;
-  Object.keys(marks).forEach(function (pi) {
-    if (pi === "_freehand") {
-      Object.keys(marks[pi]).forEach(function (passage) { n += marks[pi][passage].length; });
-    } else n += Object.keys(marks[pi]).length;
-  });
+  Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
   return n;
-}
-function getMatchingFreehand(edition, episode, passage) {
-  var marks = getMatchingEpisodeMarks(edition, episode);
-  return marks._freehand && marks._freehand[String(passage)] || [];
-}
-function setMatchingFreehand(edition, episode, passage, strokes) {
-  var marks = getMatchingEpisodeMarks(edition, episode);
-  if (!marks._freehand) marks._freehand = {};
-  if (strokes.length) marks._freehand[String(passage)] = strokes;
-  else delete marks._freehand[String(passage)];
-  if (!Object.keys(marks._freehand).length) delete marks._freehand;
-  setMatchingEpisodeMarks(edition, episode, marks);
 }
 
 /* ============ 页签切换 ============ */
@@ -1049,60 +990,7 @@ function tapWordOrMark(word, edition, episode, pi, paraIdx, wIdx) {
 function setPenMode(mode) {
   penMode = mode;
   renderPractice();
-  setTimeout(refreshDrawLayers, 0);
 }
-function matchingDrawLayer(edition, episode, passage) {
-  var paths = getMatchingFreehand(edition, episode, passage).map(function (d) { return '<path class="draw-stroke" d="' + d + '"></path>'; }).join("");
-  return '<svg class="draw-layer' + (penMode === "ul" || penMode === "eraser" ? " active" : "") + '" data-edition="' + esc(edition) + '" data-episode="' + episode + '" data-passage="' + passage + '" viewBox="0 0 1000 1000" preserveAspectRatio="none">' + paths + '</svg>';
-}
-function refreshDrawLayers() {
-  document.querySelectorAll(".draw-layer").forEach(function (layer) { layer.classList.toggle("active", penMode === "ul" || penMode === "eraser"); });
-}
-var activeDrawStroke = null;
-function drawPoint(event, svg) {
-  var rect = svg.getBoundingClientRect();
-  return [Math.round((event.clientX - rect.left) / rect.width * 10000) / 10, Math.round((event.clientY - rect.top) / rect.height * 10000) / 10];
-}
-document.addEventListener("pointerdown", function (event) {
-  var svg = event.target.closest && event.target.closest(".draw-layer.active");
-  if (!svg || (event.pointerType === "mouse" && event.button !== 0)) return;
-  event.preventDefault();
-  if (penMode === "eraser") {
-    var path = event.target.closest && event.target.closest(".draw-stroke");
-    if (!path) return;
-    var paths = Array.prototype.slice.call(svg.querySelectorAll(".draw-stroke"));
-    var strokes = getMatchingFreehand(svg.dataset.edition, +svg.dataset.episode, svg.dataset.passage);
-    strokes.splice(paths.indexOf(path), 1);
-    setMatchingFreehand(svg.dataset.edition, +svg.dataset.episode, svg.dataset.passage, strokes);
-    path.remove();
-    return;
-  }
-  svg.setPointerCapture(event.pointerId);
-  var point = drawPoint(event, svg);
-  var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("class", "draw-stroke");
-  path.setAttribute("d", "M" + point[0] + " " + point[1]);
-  svg.appendChild(path);
-  activeDrawStroke = { svg: svg, path: path, points: [point] };
-});
-document.addEventListener("pointermove", function (event) {
-  if (!activeDrawStroke) return;
-  var point = drawPoint(event, activeDrawStroke.svg);
-  activeDrawStroke.points.push(point);
-  activeDrawStroke.path.setAttribute("d", activeDrawStroke.points.map(function (p, i) { return (i ? "L" : "M") + p[0] + " " + p[1]; }).join(" "));
-});
-function finishDrawStroke() {
-  if (!activeDrawStroke) return;
-  var stroke = activeDrawStroke;
-  activeDrawStroke = null;
-  if (stroke.points.length < 2) { stroke.path.remove(); return; }
-  var svg = stroke.svg;
-  var strokes = getMatchingFreehand(svg.dataset.edition, +svg.dataset.episode, svg.dataset.passage);
-  strokes.push(stroke.path.getAttribute("d"));
-  setMatchingFreehand(svg.dataset.edition, +svg.dataset.episode, svg.dataset.passage, strokes);
-}
-document.addEventListener("pointerup", finishDrawStroke);
-document.addEventListener("pointercancel", finishDrawStroke);
 function clearAllMarks(edition, episode) {
   setEpisodeMarks(edition, episode, {});
   rerenderKeepScroll();
@@ -1115,17 +1003,23 @@ function rerenderKeepScroll() {
 }
 function tapWord(word, edition, episode) {
   var hit = lookupLocal(word);
-  var html = wordCardHTML(word, hit);
+  var html = '<h2>' + esc(word) + "</h2>";
+  if (hit) {
+    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
+    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
+  } else {
+    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
+    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
+  }
   html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
   html += '<button class="btn" onclick="addReadingWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本期生词</button> ';
   html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
   openModal(html);
 }
 function addReadingWordFromTap(edition, episode, word) {
-  var hit = lookupLocal(word);
-  var p = hit ? hit.pos : "";
-  var m = hit ? hit.meaning : "";
-  if (!p || !m) { window.open("https://dict.youdao.com/result?word=" + encodeURIComponent(word), "_blank", "noopener"); return; }
+  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
+  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
+  if (!p || !m) { alert("词性和中文都要填。"); return; }
   addReadingWord(edition, episode, word, p, m);
   closeModal();
   renderPractice();
@@ -1389,17 +1283,23 @@ function clearAllClozeMarks(edition, episode) {
 }
 function tapWordCloze(word, edition, episode) {
   var hit = lookupLocal(word);
-  var html = wordCardHTML(word, hit);
+  var html = '<h2>' + esc(word) + "</h2>";
+  if (hit) {
+    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
+    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
+  } else {
+    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
+    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
+  }
   html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
   html += '<button class="btn" onclick="addClozeWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本期生词</button> ';
   html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
   openModal(html);
 }
 function addClozeWordFromTap(edition, episode, word) {
-  var hit = lookupLocal(word);
-  var p = hit ? hit.pos : "";
-  var m = hit ? hit.meaning : "";
-  if (!p || !m) { window.open("https://dict.youdao.com/result?word=" + encodeURIComponent(word), "_blank", "noopener"); return; }
+  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
+  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
+  if (!p || !m) { alert("词性和中文都要填。"); return; }
   addClozeWord(edition, episode, word, p, m);
   closeModal();
   renderPractice();
@@ -1616,7 +1516,7 @@ function matchingPassageHTML(ep, edition, episode) {
     var parts = String(p.text || "").split("\n");
     parts.forEach(function (para, paraIdx) {
       if (!para.trim()) return;
-      out += '<div class="passage-wrap"><p class="passage">';
+      out += '<p class="passage">';
       var re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s]+|\s+/g;
       var m;
       var wIdx = 0;
@@ -1632,7 +1532,7 @@ function matchingPassageHTML(ep, edition, episode) {
           out += esc(tok);
         }
       }
-      out += "</p>" + matchingDrawLayer(edition, episode, pi + "-" + paraIdx) + "</div>";
+      out += "</p>";
     });
   });
   return out;
@@ -1660,17 +1560,23 @@ function clearAllMatchingMarks(edition, episode) {
 }
 function tapWordMatching(word, edition, episode) {
   var hit = lookupLocal(word);
-  var html = wordCardHTML(word, hit);
+  var html = '<h2>' + esc(word) + "</h2>";
+  if (hit) {
+    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
+    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
+  } else {
+    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
+    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
+  }
   html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
   html += '<button class="btn" onclick="addMatchingWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本篇生词</button> ';
   html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
   openModal(html);
 }
 function addMatchingWordFromTap(edition, episode, word) {
-  var hit = lookupLocal(word);
-  var p = hit ? hit.pos : "";
-  var m = hit ? hit.meaning : "";
-  if (!p || !m) { window.open("https://dict.youdao.com/result?word=" + encodeURIComponent(word), "_blank", "noopener"); return; }
+  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
+  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
+  if (!p || !m) { alert("词性和中文都要填。"); return; }
   addMatchingWord(edition, episode, word, p, m);
   closeModal();
   renderPractice();
@@ -1913,6 +1819,116 @@ function addMistakeFromTranslation(tab, id) {
     correctAnswer: it.reference || ""
   });
 }
+
+/* ============ 写作（分主题 · 模拟题 + 真题） ============ */
+var curWTopic = "education";
+var curWFilter = "all"; /* "all" 全部 | "mock" 模拟题 | "real" 真题 */
+var curWItem = null; /* 题目 id */
+var wChecked = false;
+var wDraft = "";
+
+function wMock() { return window.ENG_WRITING_MOCK || []; }
+function wReal() { return window.ENG_WRITING_REAL || []; }
+function wTopics() { return window.ENG_WRITING_TOPICS || []; }
+function wTopicById(id) {
+  var ts = wTopics();
+  for (var i = 0; i < ts.length; i++) { if (ts[i].id === id) return ts[i]; }
+  return null;
+}
+function wFind(id) {
+  var arr = wMock().concat(wReal());
+  for (var i = 0; i < arr.length; i++) { if (arr[i].id === id) return arr[i]; }
+  return null;
+}
+function wCountWords(text) {
+  if (!text) return 0;
+  return text.split(/\s+/).filter(function (w) { return w.length > 0; }).length;
+}
+function renderWritingHome() {
+  var topics = wTopics();
+  var mock = wMock(), real = wReal();
+  var html = '<div class="chips">';
+  topics.forEach(function (t) {
+    var mc = mock.filter(function (q) { return q.themeId === t.id; }).length;
+    var rc = real.filter(function (q) { return q.themeId === t.id; }).length;
+    html += '<button class="' + (t.id === curWTopic ? "active" : "") + '" onclick="curWTopic=\'' + t.id + '\';curWItem=null;wChecked=false;wDraft=\'\';renderPractice()">' + esc(t.name) + '（模拟' + mc + ' · 真题' + rc + '）</button>';
+  });
+  html += "</div>";
+  var topic = wTopicById(curWTopic) || topics[0];
+  if (!topic) return html + '<div class="card">写作数据尚未加载。</div>';
+  var list = mock.concat(real).filter(function (q) { return q.themeId === topic.id; });
+  var mCount = 0, rCount = 0;
+  list.forEach(function (q) { if (q.kind === "real") rCount++; else mCount++; });
+  html += '<div class="card"><h2>' + esc(topic.name) + ' · 模拟题 ' + mCount + ' 道 + 真题 ' + rCount + ' 道</h2>';
+  if (topic.intro) html += '<p class="muted">' + esc(topic.intro) + '</p>';
+  html += '<p class="muted">每道题先自己写（120–180 词，30 分钟），写完点自查看范文和逐句解析。</p></div>';
+  html += '<div class="card"><h3>优美句式</h3>';
+  (topic.sentences || []).forEach(function (s) {
+    html += '<div class="dict-row"><b>' + esc(s.en) + '</b><div>' + esc(s.zh || "") + '</div></div>';
+  });
+  html += '<h3>优美词组</h3>';
+  (topic.phrases || []).forEach(function (p) {
+    html += '<div class="dict-row"><b>' + esc(p.en) + '</b><div>' + esc(p.zh || "") + '</div></div>';
+  });
+  html += '<h3>“低分表达 → 高分表达”替换表</h3>';
+  (topic.upgrades || []).forEach(function (u) {
+    html += '<div class="dict-row"><b style="color:var(--red)">' + esc(u.low || "") + '</b> → <b style="color:var(--green)">' + esc(u.high || "") + '</b><div>' + esc(u.zh || "") + '</div></div>';
+  });
+  html += '</div>';
+  html += '<div class="chips">';
+  html += '<button class="' + (curWFilter === "all" ? "active" : "") + '" onclick="curWFilter=\'all\';renderPractice()">全部（' + list.length + ' 道）</button>';
+  html += '<button class="' + (curWFilter === "mock" ? "active" : "") + '" onclick="curWFilter=\'mock\';renderPractice()">模拟题（' + mCount + ' 道）</button>';
+  html += '<button class="' + (curWFilter === "real" ? "active" : "") + '" onclick="curWFilter=\'real\';renderPractice()">真题（' + rCount + ' 道）</button>';
+  html += "</div>";
+  if (curWFilter !== "mock") {
+    html += '<p class="muted">真题说明：各出版社对第1/2/3套的编号不完全一致，同一场次的三道题以题面为准。</p>';
+  }
+  var show = list.filter(function (q) { return curWFilter === "all" || (curWFilter === "mock" ? q.kind !== "real" : q.kind === "real"); });
+  html += '<div class="card"><div class="ep-list">';
+  show.forEach(function (q) {
+    var label = (q.kind === "real" ? "真题 · " + (q.source || "") : "模拟题") + " · " + (q.title || "") + (q.type ? "（" + q.type + "）" : "");
+    html += '<div class="ep-item" onclick="curWItem=\'' + esc(q.id).replace(/'/g, "\\'") + '\';wChecked=false;wDraft=\'\';renderPractice()"><span>' + esc(label) + '</span><span class="muted">›</span></div>';
+  });
+  html += "</div></div>";
+  return html;
+}
+function renderWritingDetail() {
+  var it = wFind(curWItem);
+  if (!it) return renderWritingHome();
+  var isReal = it.kind === "real";
+  var topicName = (wTopicById(it.themeId) || {}).name || "写作";
+  var html = '<button class="btn ghost" onclick="curWItem=null;wChecked=false;wDraft=\'\';renderPractice()">‹ 返回' + esc(topicName) + '列表</button>';
+  html += '<div class="card"><h2>' + esc(it.title || "") + '</h2>';
+  html += '<p class="muted">' + (isReal ? "真题 · " + esc(it.source || "") : "模拟题") + (it.type ? " · " + esc(it.type) : "") + ' · 120–180 词 · 30 分钟</p>';
+  html += "<h3>题目要求</h3><pre class=\"light\">" + esc(it.prompt || "") + "</pre>";
+  html += '<h3>你的作文</h3><p class="muted">先自己写满 120–180 词，写完再点自查。</p>';
+  html += '<textarea id="w-my" oninput="wDraft=this.value;var c=document.getElementById(\'w-count\');if(c)c.textContent=wCountWords(this.value)+\' 词\'" placeholder="在这里写你的作文……">' + esc(wDraft) + "</textarea>";
+  html += '<p class="muted">已写 <b id="w-count">' + wCountWords(wDraft) + ' 词</b>（要求 120–180 词）</p>';
+  html += '<div style="margin-top:8px"><button class="btn" onclick="wChecked=true;renderPractice()" ' + (wChecked ? "disabled" : "") + '>自查</button></div>';
+  if (wChecked) {
+    html += '<div class="answer-box open"><h3>参考范文' + (isReal ? '（非官方范文）' : '') + '</h3><pre class="light">' + esc((it.essay || []).join("\n\n")) + '</pre>';
+    html += "<h3>逐句解析</h3>";
+    (it.analysis || []).forEach(function (a, i) {
+      html += '<div class="explain-sec"><p><b>第 ' + (i + 1) + ' 句：</b>' + esc(a.en || "") + ' <span class="badge topic">' + esc(a.tag || "") + '</span></p>' + (a.note ? '<p class="muted">' + esc(a.note) + "</p>" : "") + "</div>";
+    });
+    html += '<button class="btn ghost small" onclick="addMistakeFromWriting(\'' + esc(it.id).replace(/'/g, "\\'") + '\')">加入错题库</button>';
+    html += "</div>";
+  }
+  html += "</div>";
+  return html;
+}
+function addMistakeFromWriting(id) {
+  var it = wFind(id);
+  if (!it) return;
+  var my = wDraft ? wDraft.trim() : "";
+  openMistakeForm({
+    module: "writing",
+    title: "写作 · " + (it.title || "") + "（" + (it.kind === "real" ? (it.source || "真题") : "模拟题") + "）",
+    question: it.prompt || "",
+    myAnswer: my || "（未写作文）",
+    correctAnswer: (it.essay || []).join("\n")
+  });
+}
 </script>
 
 <script>
@@ -1950,6 +1966,11 @@ function renderPractice() {
   }
   if (curPracticeModule === "matching") {
     html += curMatchingEpisode ? renderMatchingEpisode() : renderMatchingHome();
+    $("view-practice").innerHTML = html;
+    return;
+  }
+  if (curPracticeModule === "writing") {
+    html += curWItem ? renderWritingDetail() : renderWritingHome();
     $("view-practice").innerHTML = html;
     return;
   }
