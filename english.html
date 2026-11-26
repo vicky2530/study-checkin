@@ -12,6 +12,7 @@
 <script src="eng-reading-advanced.js"></script>
 <script src="eng-reading-exam.js"></script>
 <script src="eng-lessons.js"></script>
+<script src="eng-translation.js"></script>
 <style>
   :root {
     --primary: #5b6abf;
@@ -89,22 +90,14 @@
   .opt.wrong { border-color: var(--red); background: #fbe7e7; }
   .tap-word { border-bottom: 1px dotted #8a8fb0; cursor: pointer; }
   .tap-word:hover { color: var(--primary); border-bottom-color: var(--primary); }
-  .passage.tool-highlight .tap-word, .passage.tool-underline .tap-word { cursor: crosshair; border-bottom-color: transparent; }
-  .tap-word.mark-highlight { background: rgba(235, 210, 90, 0.52); border-radius: 3px; box-shadow: 0 0 0 1px rgba(190, 160, 45, 0.12); }
-  .tap-word.mark-underline { border-bottom: 2px solid #696fbd !important; }
-  .reading-mark-toolbar { position: sticky; top: 51px; z-index: 8; display: flex; flex-wrap: wrap; gap: 7px; align-items: center; padding: 9px; margin: 10px 0 14px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255, 255, 255, 0.96); box-shadow: 0 3px 10px rgba(46, 50, 69, 0.08); }
-  .reading-mark-toolbar button { min-height: 36px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--muted); cursor: pointer; }
-  .reading-mark-toolbar button.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary-dark); font-weight: bold; }
-  .reading-mark-toolbar .clear-marks { margin-left: auto; color: var(--red); }
+  .tap-word.mark-hl { background: rgba(255, 233, 110, 0.55); }
+  .tap-word.mark-ul { border-bottom: 2px solid var(--primary); }
+  .pen-toolbar { position: sticky; top: 50px; z-index: 5; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .pen-toolbar .lbl { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  .pen-toolbar button { padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .pen-toolbar button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
   .passage { font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.9; }
   .passage p { margin-bottom: 12px; }
-  .reading-passage-wrap { position: relative; }
-  .reading-draw-layer { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; touch-action: none; }
-  .reading-draw-layer.enabled { pointer-events: auto; cursor: crosshair; }
-  .reading-stroke { fill: none; stroke: rgba(235, 210, 90, 0.55); stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; }
-  .reading-stroke.underline { stroke: #696fbd; stroke-width: 2.5; }
-  .reading-stroke.eraser-preview { stroke: rgba(176, 82, 82, 0.45); stroke-width: 15; }
-  .reading-mark-toolbar .tool-hint { flex-basis: 100%; color: var(--muted); font-size: 12px; }
   .ep-list { display: flex; flex-direction: column; gap: 6px; }
   .ep-item { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
   .ep-item:hover { border-color: var(--primary); background: var(--primary-light); }
@@ -126,7 +119,6 @@
   .dict-row .res.no { color: var(--red); }
   @media (max-width: 600px) {
     header h1 { font-size: 19px; }
-    .english-back { position: static; display: inline-block; margin-bottom: 8px; }
     .card { padding: 12px; }
     .word-grid { grid-template-columns: 1fr; }
     .passage { font-size: 15px; }
@@ -135,7 +127,6 @@
 </head>
 <body>
 <header>
-  <a class="english-back" href="subject.html?name=%E8%8B%B1%E8%AF%AD%E5%9B%9B%E7%BA%A7">返回英语四级</a>
   <h1>英语四级学习</h1>
   <p id="overview">四级核心词汇 · 听力 · 阅读 · 写作翻译 · 错题库</p>
 </header>
@@ -242,17 +233,11 @@ function addWrongWord(word, pos, meaning, wrongSpelling, day, source) {
       list[i].pos = pos || list[i].pos;
       list[i].meaning = meaning || list[i].meaning;
       list[i].mastered = false;
-      if (day) {
-        var savedDays = Array.isArray(list[i].days) ? list[i].days.slice() : [];
-        if (list[i].day && savedDays.indexOf(list[i].day) === -1) savedDays.push(list[i].day);
-        if (savedDays.indexOf(day) === -1) savedDays.push(day);
-        list[i].days = savedDays;
-      }
       saveJSON(KEY_WRONG, list);
       return list[i];
     }
   }
-  var item = { id: uid(), word: word, pos: pos, meaning: meaning, wrongSpelling: wrongSpelling || "", day: day || null, days: day ? [day] : [], source: source || "", mastered: false, createdAt: new Date().toISOString() };
+  var item = { id: uid(), word: word, pos: pos, meaning: meaning, wrongSpelling: wrongSpelling || "", day: day || null, source: source || "", mastered: false, createdAt: new Date().toISOString() };
   list.unshift(item);
   saveJSON(KEY_WRONG, list);
   return item;
@@ -331,6 +316,25 @@ function setRWordMastered(id, mastered) {
 }
 function deleteLWord(id) { saveJSON(KEY_LWORDS, getListeningWords().filter(function (x) { return x.id !== id; })); }
 function deleteRWord(id) { saveJSON(KEY_RWORDS, getReadingWords().filter(function (x) { return x.id !== id; })); }
+
+/* ============ 阅读标记笔（按期存 localStorage，键：版本-期号 -> {篇章索引: {"段落:词序号": "hl"|"ul"}}） ============ */
+function getReadingMarks() { return loadJSON(KEY_RMARKS, {}); }
+function marksKey(edition, episode) { return edition + "-" + episode; }
+function getEpisodeMarks(edition, episode) {
+  var all = getReadingMarks();
+  return all[marksKey(edition, episode)] || {};
+}
+function setEpisodeMarks(edition, episode, marks) {
+  var all = getReadingMarks();
+  all[marksKey(edition, episode)] = marks;
+  saveJSON(KEY_RMARKS, all);
+}
+function countEpisodeMarks(edition, episode) {
+  var marks = getEpisodeMarks(edition, episode);
+  var n = 0;
+  Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
+  return n;
+}
 
 /* ============ 页签切换 ============ */
 var TABS = ["learn", "words", "practice", "mistakes", "prompt"];
@@ -412,8 +416,8 @@ function goPractice(mid) {
 <script>
 /* ============ 单词 ============ */
 var curWordDay = 1;
-var curWrongWordDay = 1;
 var curPhraseDay = 1;
+var curWWFilter = "all";
 var dictState = {}; /* key: day-wordIndex -> {status: 'ok'|'wrong'|'skip', input} */
 var phraseDictState = {};
 
@@ -425,21 +429,6 @@ function renderWords() {
     html += '<option value="' + d.day + '"' + (d.day === curWordDay ? " selected" : "") + ">Day " + d.day + "</option>";
   });
   html += "</select>";
-  html += '<label style="margin-top:12px">查看当天不会或没有默写出来的词</label><select id="wrong-word-day-sel" onchange="curWrongWordDay=+this.value;renderWords()">';
-  days.forEach(function (d) {
-    html += '<option value="' + d.day + '"' + (d.day === curWrongWordDay ? " selected" : "") + ">Day " + d.day + "</option>";
-  });
-  html += "</select>";
-  var dayWrongWords = getWrongWords().filter(function (x) {
-    var savedDays = Array.isArray(x.days) ? x.days : [];
-    return x.day === curWrongWordDay || savedDays.indexOf(curWrongWordDay) !== -1;
-  });
-  html += '<div class="day-wrong-words"><h3>Day ' + curWrongWordDay + ' 不会的词 <span class="muted">（' + dayWrongWords.length + ' 个）</span></h3>';
-  if (!dayWrongWords.length) html += '<p class="muted">这一天还没有记录不会或默写错误的单词。</p>';
-  dayWrongWords.forEach(function (x) {
-    html += '<div class="dict-row"><b>' + esc(x.word) + '</b> <span style="color:var(--accent)">' + esc(x.pos || "") + "</span> " + esc(x.meaning || "") + (x.wrongSpelling ? ' <span class="muted">（你写成：' + esc(x.wrongSpelling) + "）</span>" : "") + ' <button class="btn ghost small" onclick="speakWordTwice(\'' + esc(x.word).replace(/'/g, "\\'") + '\')">读音</button></div>';
-  });
-  html += "</div>";
   var day = null;
   days.forEach(function (d) { if (d.day === curWordDay) day = d; });
   if (day) {
@@ -497,12 +486,40 @@ function renderWords() {
   html += "</div>";
 
   /* 错词库 */
-  html += '<div class="card"><h2>错词库 <span class="muted">（' + getWrongWords().filter(function (x) { return !x.mastered; }).length + " 个未掌握）</span></h2>";
+  var allWW = getWrongWords();
+  html += '<div class="card"><h2>错词库 <span class="muted">（' + allWW.filter(function (x) { return !x.mastered; }).length + " 个未掌握）</span></h2>";
   html += '<div id="ww-add"><label>手动添加错词（单词 + 词性 + 中文必填）</label>';
   html += '<input type="text" id="ww-word" placeholder="单词"><input type="text" id="ww-pos" placeholder="词性，如 v. / n. / adj."><input type="text" id="ww-mean" placeholder="中文意思">';
   html += '<button class="btn small" onclick="manualAddWrong()">添加</button></div>';
-  var ww = getWrongWords();
-  if (!ww.length) html += '<p class="muted">错词库是空的。默写错的词会自动进来，也可以手动添加。</p>';
+  /* 按天查看错词下拉框 */
+  html += '<label>按天查看错词</label><select id="ww-filter-sel" onchange="curWWFilter=this.value;renderWords()">';
+  html += '<option value="all"' + (curWWFilter === "all" ? " selected" : "") + ">全部（" + allWW.length + " 个）</option>";
+  for (var d = 1; d <= 100; d++) {
+    var dcnt = allWW.filter(function (x) { return x.day === d; }).length;
+    html += '<option value="day-' + d + '"' + (curWWFilter === "day-" + d ? " selected" : "") + ">Day " + d + " · " + dcnt + " 个错词</option>";
+  }
+  var phCnt = allWW.filter(function (x) { return x.source === "来自词组与短语默写" || x.pos === "词组"; }).length;
+  var manCnt = allWW.filter(function (x) { return x.source === "手动添加"; }).length;
+  html += '<option value="phrases"' + (curWWFilter === "phrases" ? " selected" : "") + ">词组与短语（" + phCnt + " 个）</option>";
+  html += '<option value="manual"' + (curWWFilter === "manual" ? " selected" : "") + ">手动添加（" + manCnt + " 个）</option>";
+  html += "</select>";
+  var ww = allWW.filter(function (x) {
+    if (curWWFilter === "all") return true;
+    if (curWWFilter === "phrases") return x.source === "来自词组与短语默写" || x.pos === "词组";
+    if (curWWFilter === "manual") return x.source === "手动添加";
+    if (curWWFilter.indexOf("day-") === 0) return x.day === +curWWFilter.slice(4);
+    return true;
+  });
+  if (!ww.length) {
+    if (curWWFilter.indexOf("day-") === 0) {
+      var dn = curWWFilter.slice(4);
+      html += '<p class="muted">Day ' + dn + ' 还没有错词，先去做 Day ' + dn + ' 的默写吧。</p>';
+    } else if (!allWW.length) {
+      html += '<p class="muted">错词库是空的。默写错的词会自动进来，也可以手动添加。</p>';
+    } else {
+      html += '<p class="muted">这一项下面还没有错词。</p>';
+    }
+  }
   ww.forEach(function (x) {
     html += '<div class="dict-row"><b>' + esc(x.word) + '</b> <span style="color:var(--accent)">' + esc(x.pos || "") + "</span> " + esc(x.meaning || "") + (x.wrongSpelling ? ' <span class="muted">（你写成：' + esc(x.wrongSpelling) + "）</span>" : "") + (x.source ? ' <span class="badge src">' + esc(x.source) + "</span>" : "") + (x.mastered ? ' <span class="done-mark">已掌握</span>' : "");
     html += '<div><button class="btn ghost small" onclick="setWrongMastered(\'' + x.id + "'," + (!x.mastered) + ');renderWords()">' + (x.mastered ? "取消已掌握" : "标为已掌握") + '</button><button class="btn danger small" onclick="deleteWrongWord(\'' + x.id + '\');renderWords()">删除</button></div></div>';
@@ -798,7 +815,6 @@ var curRVersion = "basic";
 var curREpisode = null;
 var rAnswers = {}; /* "p0-2" -> letter */
 var rShowAnswers = false;
-var readingMarkMode = "lookup";
 
 function readingData(version) {
   if (version === "basic") return window.ENG_READING_BASIC || [];
@@ -809,138 +825,6 @@ function readingEpisode(version, no) {
   var eps = readingData(version);
   for (var i = 0; i < eps.length; i++) { if (eps[i].no === no) return eps[i]; }
   return null;
-}
-
-function readingMarkEpisodeKey(edition, episode) { return edition + "-" + episode; }
-function getReadingMarks(edition, episode) {
-  var all = loadJSON(KEY_RMARKS, {});
-  var saved = all[readingMarkEpisodeKey(edition, episode)] || {};
-  if (Array.isArray(saved)) return { words: {}, strokes: saved };
-  return { words: saved.words || saved, strokes: Array.isArray(saved.strokes) ? saved.strokes : [] };
-}
-function saveReadingMarks(edition, episode, marks) {
-  var all = loadJSON(KEY_RMARKS, {});
-  var key = readingMarkEpisodeKey(edition, episode);
-  if (Object.keys(marks.words).length || marks.strokes.length) all[key] = marks;
-  else delete all[key];
-  saveJSON(KEY_RMARKS, all);
-}
-function setReadingMarkMode(mode) {
-  readingMarkMode = mode;
-  renderPractice();
-}
-document.addEventListener("click", function (event) {
-  var wordElement = event.target.closest ? event.target.closest(".tap-word") : null;
-  if (!wordElement || !wordElement.closest("#view-practice")) return;
-  var passage = wordElement.closest(".passage");
-  if (!passage) return;
-  if (readingMarkMode === "lookup") {
-    event.preventDefault();
-    tapWord(wordElement.getAttribute("data-word"), wordElement.getAttribute("data-edition"), Number(wordElement.getAttribute("data-episode")));
-  }
-});
-function clearReadingMarks(edition, episode) {
-  saveReadingMarks(edition, episode, { words: {}, strokes: [] });
-  renderPractice();
-}
-function readingMarkToolbar(edition, episode) {
-  var modes = [["lookup", "点词查词"], ["highlight", "荧光笔"], ["underline", "下划线笔"], ["eraser", "橡皮"]];
-  var html = '<div class="reading-mark-toolbar" aria-label="阅读标记工具">';
-  modes.forEach(function (item) {
-    html += '<button type="button" class="' + (readingMarkMode === item[0] ? "active" : "") + '" onclick="setReadingMarkMode(\'' + item[0] + '\')">' + item[1] + "</button>";
-  });
-  html += '<button type="button" class="clear-marks" onclick="clearReadingMarks(\'' + edition + "'," + episode + ')">清除全部标记</button>';
-  html += '<span class="tool-hint">荧光笔/下划线笔：按住鼠标拖动即可画线；橡皮：拖过笔迹擦除。</span></div>';
-  return html;
-}
-
-function readingStrokeSVG(edition, episode, passageIndex) {
-  var strokes = getReadingMarks(edition, episode).strokes;
-  var html = '<svg class="reading-draw-layer' + (readingMarkMode === "lookup" ? "" : " enabled") + '" data-passage="' + passageIndex + '" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label="文章手绘标记" onpointerdown="readingPointerDown(event)" onpointermove="readingPointerMove(event)" onpointerup="readingPointerUp(event)" onpointercancel="readingPointerUp(event)">';
-  strokes.forEach(function (stroke, index) {
-    if (stroke.passage !== passageIndex) return;
-    var points = stroke.points.map(function (point) { return point[0] + "," + point[1]; }).join(" ");
-    html += '<polyline class="reading-stroke' + (stroke.mode === "underline" ? " underline" : "") + '" data-stroke-index="' + index + '" points="' + points + '"></polyline>';
-  });
-  html += "</svg>";
-  return html;
-}
-var activeReadingStroke = null;
-function readingPointerDown(event) {
-  if (readingMarkMode === "lookup") return;
-  var svg = event.currentTarget;
-  var point = readingPoint(svg, event);
-  var marks = getReadingMarks(curRVersion, curREpisode);
-  if (readingMarkMode === "eraser") {
-    activeReadingStroke = { mode: "eraser", passage: Number(svg.getAttribute("data-passage")), changed: false };
-    svg.setPointerCapture(event.pointerId);
-    eraseReadingStrokeAt(svg, point, marks);
-    return;
-  }
-  activeReadingStroke = { mode: readingMarkMode, passage: Number(svg.getAttribute("data-passage")), points: [point] };
-  svg.setPointerCapture(event.pointerId);
-  var polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-  polyline.setAttribute("class", "reading-stroke" + (readingMarkMode === "underline" ? " underline" : ""));
-  polyline.setAttribute("points", point.join(","));
-  svg.appendChild(polyline);
-  activeReadingStroke.element = polyline;
-  event.preventDefault();
-}
-function readingPointerMove(event) {
-  if (!activeReadingStroke) return;
-  var svg = event.currentTarget;
-  var point = readingPoint(svg, event);
-  if (activeReadingStroke.mode === "eraser") {
-    var eraserMarks = getReadingMarks(curRVersion, curREpisode);
-    if (eraseReadingStrokeAt(svg, point, eraserMarks)) activeReadingStroke.changed = true;
-    return;
-  }
-  activeReadingStroke.points.push(point);
-  activeReadingStroke.element.setAttribute("points", activeReadingStroke.points.map(function (p) { return p[0] + "," + p[1]; }).join(" "));
-  event.preventDefault();
-}
-function readingPointerUp(event) {
-  if (!activeReadingStroke) return;
-  var stroke = activeReadingStroke;
-  activeReadingStroke = null;
-  if (stroke.mode === "eraser") {
-    if (stroke.changed) renderPractice();
-    event.preventDefault();
-    return;
-  }
-  if (stroke.points.length > 1) {
-    var marks = getReadingMarks(curRVersion, curREpisode);
-    marks.strokes.push({ mode: stroke.mode, passage: stroke.passage, points: stroke.points });
-    saveReadingMarks(curRVersion, curREpisode, marks);
-  } else {
-    stroke.element.remove();
-  }
-  event.preventDefault();
-}
-function eraseReadingStrokeAt(svg, point, marks) {
-  var wrap = svg.parentElement;
-  var rect = svg.getBoundingClientRect();
-  var x = rect.left + point[0] / 1000 * rect.width;
-  var y = rect.top + point[1] / 1000 * rect.height;
-  var hit = document.elementFromPoint(x, y);
-  var strokeElement = hit && hit.closest ? hit.closest(".reading-stroke") : null;
-  if (!strokeElement) return false;
-  var index = Number(strokeElement.getAttribute("data-stroke-index"));
-  if (marks.strokes[index] && marks.strokes[index].passage === Number(svg.getAttribute("data-passage"))) {
-    marks.strokes.splice(index, 1);
-    saveReadingMarks(curRVersion, curREpisode, marks);
-    strokeElement.remove();
-    wrap.querySelectorAll(".reading-stroke[data-stroke-index]").forEach(function (el) {
-      var oldIndex = Number(el.getAttribute("data-stroke-index"));
-      if (oldIndex > index) el.setAttribute("data-stroke-index", oldIndex - 1);
-    });
-    return true;
-  }
-  return false;
-}
-function readingPoint(svg, event) {
-  var rect = svg.getBoundingClientRect();
-  return [Math.round((event.clientX - rect.left) / rect.width * 1000), Math.round((event.clientY - rect.top) / rect.height * 1000)];
 }
 
 function renderReadingHome() {
@@ -960,23 +844,26 @@ function renderReadingHome() {
   return html;
 }
 
-/* 文章逐词可点：单词是正常文字，只留虚线下划线，绝不包方框 */
-function tappableHTML(text, edition, episode, passageIndex) {
+/* 文章逐词可点：单词是正常文字，只留虚线下划线，绝不包方框；标记笔模式下点词改为涂标记 */
+function tappableHTML(text, edition, episode, pi) {
+  var marks = getEpisodeMarks(edition, episode);
+  var pmarks = marks[String(pi)] || {};
   var parts = String(text || "").split("\n");
   var out = "";
-  var wordIndex = 0;
-  var marks = getReadingMarks(edition, episode).words;
-  parts.forEach(function (para) {
+  parts.forEach(function (para, paraIdx) {
     if (!para.trim()) return;
-    out += '<p class="passage' + (readingMarkMode === "highlight" ? " tool-highlight" : readingMarkMode === "underline" ? " tool-underline" : "") + '">';
+    out += '<p class="passage">';
     var re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s]+|\s+/g;
     var m;
+    var wIdx = 0;
     while ((m = re.exec(para)) !== null) {
       var tok = m[0];
       if (/^[A-Za-z]/.test(tok)) {
-        var markId = passageIndex + "-" + wordIndex++;
-        var markClass = marks[markId] === "highlight" ? " mark-highlight" : marks[markId] === "underline" ? " mark-underline" : "";
-        out += '<span class="tap-word' + markClass + '" data-word="' + esc(tok) + '" data-edition="' + edition + '" data-episode="' + episode + '" data-mark-id="' + markId + '">' + esc(tok) + "</span>";
+        var key = paraIdx + ":" + wIdx;
+        var mk = pmarks[key] || "";
+        var cls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
+        out += '<span class="' + cls + '" onclick="tapWordOrMark(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
+        wIdx++;
       } else {
         out += esc(tok);
       }
@@ -984,6 +871,39 @@ function tappableHTML(text, edition, episode, passageIndex) {
     out += "</p>";
   });
   return out;
+}
+/* 标记笔模式：lookup 点词查词；hl 荧光笔；ul 下划线笔；eraser 橡皮。两种标记互斥，再点一次取消 */
+var penMode = "lookup";
+function tapWordOrMark(word, edition, episode, pi, paraIdx, wIdx) {
+  if (penMode === "lookup") { tapWord(word, edition, episode); return; }
+  var marks = getEpisodeMarks(edition, episode);
+  var pkey = String(pi);
+  if (!marks[pkey]) marks[pkey] = {};
+  var key = paraIdx + ":" + wIdx;
+  if (penMode === "eraser") {
+    delete marks[pkey][key];
+  } else {
+    var kind = penMode === "hl" ? "hl" : "ul";
+    if (marks[pkey][key] === kind) delete marks[pkey][key];
+    else marks[pkey][key] = kind;
+  }
+  if (Object.keys(marks[pkey]).length === 0) delete marks[pkey];
+  setEpisodeMarks(edition, episode, marks);
+  rerenderKeepScroll();
+}
+function setPenMode(mode) {
+  penMode = mode;
+  renderPractice();
+}
+function clearAllMarks(edition, episode) {
+  setEpisodeMarks(edition, episode, {});
+  rerenderKeepScroll();
+}
+function rerenderKeepScroll() {
+  var y = 0;
+  try { y = window.scrollY || document.documentElement.scrollTop || 0; } catch (e) {}
+  renderPractice();
+  try { if (typeof window.scrollTo === "function") window.scrollTo(0, y); } catch (e) {}
 }
 function tapWord(word, edition, episode) {
   var hit = lookupLocal(word);
@@ -1014,13 +934,18 @@ function renderReadingEpisode() {
   if (!ep) return renderReadingHome();
   var vname = R_VERSIONS.filter(function (v) { return v.id === curRVersion; })[0].name;
   var html = '<button class="btn ghost" onclick="curREpisode=null;rShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
-  html += readingMarkToolbar(curRVersion, ep.no);
+  var markCount = countEpisodeMarks(curRVersion, ep.no);
+  html += '<div class="pen-toolbar"><span class="lbl">标记笔：</span>';
+  html += '<button class="' + (penMode === "lookup" ? "active" : "") + '" onclick="setPenMode(\'lookup\')">点词查词</button>';
+  html += '<button class="' + (penMode === "hl" ? "active" : "") + '" onclick="setPenMode(\'hl\')">荧光笔</button>';
+  html += '<button class="' + (penMode === "ul" ? "active" : "") + '" onclick="setPenMode(\'ul\')">下划线笔</button>';
+  html += '<button class="' + (penMode === "eraser" ? "active" : "") + '" onclick="setPenMode(\'eraser\')">橡皮</button>';
+  html += '<button onclick="clearAllMarks(\'' + curRVersion + "'," + ep.no + ')" ' + (markCount ? "" : "disabled") + ">清除全部标记（" + markCount + "）</button>";
+  html += "</div>";
   html += '<div class="card"><h2>' + esc(vname) + " 第" + ep.no + "期</h2>";
   ep.passages.forEach(function (ps, pi) {
     html += '<h3>第' + (pi + 1) + "篇 · " + esc(ps.title) + "</h3>";
-    html += '<div class="reading-passage-wrap">' + tappableHTML(ps.text, curRVersion, ep.no, pi);
-    html += readingStrokeSVG(curRVersion, ep.no, pi);
-    html += "</div>";
+    html += tappableHTML(ps.text, curRVersion, ep.no, pi);
     html += "<h3>题目</h3>";
     ps.questions.forEach(function (q, qi) {
       var key = pi + "-" + qi;
@@ -1136,6 +1061,120 @@ function readingWordsHomeHTML() {
 </script>
 
 <script>
+/* ============ 翻译（真题 / 模拟题两板块） ============ */
+var curTrTab = "real"; /* "real" 真题 | "mock" 模拟题 */
+var curTrItem = null; /* 题目 id */
+var trChecked = false;
+var trTopic = "all";
+var trPage = 1;
+var trMyDraft = "";
+var TR_PAGE_SIZE = 10;
+
+function trReal() { return window.ENG_TRANSLATION_REAL || []; }
+function trMock() { return window.ENG_TRANSLATION_MOCK || []; }
+function trPatternNotes() { return window.ENG_PATTERN_NOTES || []; }
+function trFind(tab, id) {
+  var arr = tab === "real" ? trReal() : trMock();
+  for (var i = 0; i < arr.length; i++) { if (arr[i].id === id) return arr[i]; }
+  return null;
+}
+function patternText(p) {
+  if (p && typeof p === "object") {
+    return (p.title || p.key || p.id || "") + (p.content || p.text || p.note ? "：" + (p.content || p.text || p.note) : "");
+  }
+  var notes = trPatternNotes();
+  for (var i = 0; i < notes.length; i++) {
+    var n = notes[i];
+    if (n && (n.id === p || n.key === p || n.title === p)) {
+      return (n.title || n.id || "") + "：" + (n.content || n.text || n.note || "");
+    }
+  }
+  return String(p || "");
+}
+function renderTranslationHome() {
+  var real = trReal(), mock = trMock();
+  var html = '<div class="chips">';
+  html += '<button class="' + (curTrTab === "real" ? "active" : "") + '" onclick="curTrTab=\'real\';curTrItem=null;trPage=1;trMyDraft=\'\';renderPractice()">真题（' + real.length + ' 道）</button>';
+  html += '<button class="' + (curTrTab === "mock" ? "active" : "") + '" onclick="curTrTab=\'mock\';curTrItem=null;trPage=1;trMyDraft=\'\';renderPractice()">模拟题（' + mock.length + ' 道）</button>';
+  html += "</div>";
+  var arr = curTrTab === "real" ? real : mock;
+  if (curTrTab === "mock") {
+    var topics = [];
+    mock.forEach(function (it) { if (it.topic && topics.indexOf(it.topic) < 0) topics.push(it.topic); });
+    html += '<div class="card"><label>按话题筛选</label><select onchange="trTopic=this.value;trPage=1;renderPractice()">';
+    html += '<option value="all"' + (trTopic === "all" ? " selected" : "") + ">全部话题</option>";
+    topics.forEach(function (t) {
+      html += '<option value="' + esc(t) + '"' + (trTopic === t ? " selected" : "") + ">" + esc(t) + "</option>";
+    });
+    html += "</select></div>";
+    if (trTopic !== "all") arr = arr.filter(function (it) { return it.topic === trTopic; });
+  }
+  var total = arr.length;
+  var pages = Math.max(1, Math.ceil(total / TR_PAGE_SIZE));
+  if (trPage > pages) trPage = pages;
+  var start = (trPage - 1) * TR_PAGE_SIZE;
+  var pageItems = arr.slice(start, start + TR_PAGE_SIZE);
+  html += '<div class="card"><h2>' + (curTrTab === "real" ? "真题" : "模拟题") + " · 共 " + total + ' 道</h2>';
+  html += '<p class="muted">' + (curTrTab === "real" ? "往年四级段落翻译真题，每道标明年份和套数。" : "按真题标准自编的模拟题，明确标注为模拟题，不是真题。") + "</p></div>";
+  html += '<div class="card"><div class="ep-list">';
+  pageItems.forEach(function (it) {
+    html += '<div class="ep-item" onclick="curTrItem=\'' + esc(it.id).replace(/'/g, "\\'") + '\';trChecked=false;trMyDraft=\'\';renderPractice()"><span>' + esc(it.source || "") + (it.topic ? " · " + esc(it.topic) : "") + '</span><span class="muted">›</span></div>';
+  });
+  html += "</div>";
+  if (pages > 1) {
+    html += '<div style="margin-top:10px"><button class="btn ghost small" onclick="trPage=Math.max(1,trPage-1);renderPractice()" ' + (trPage <= 1 ? "disabled" : "") + ">上一页</button> ";
+    html += '<span class="muted">第 ' + trPage + " / " + pages + " 页</span> ";
+    html += '<button class="btn ghost small" onclick="trPage=Math.min(' + pages + ',trPage+1);renderPractice()" ' + (trPage >= pages ? "disabled" : "") + ">下一页</button></div>";
+  }
+  html += "</div>";
+  return html;
+}
+function renderTranslationDetail() {
+  var it = trFind(curTrTab, curTrItem);
+  if (!it) return renderTranslationHome();
+  var tabName = curTrTab === "real" ? "真题" : "模拟题";
+  var html = '<button class="btn ghost" onclick="curTrItem=null;trChecked=false;trMyDraft=\'\';renderPractice()">‹ 返回' + tabName + '列表</button>';
+  html += '<div class="card"><h2>' + esc(it.source || "") + (it.topic ? " · " + esc(it.topic) : "") + "</h2>";
+  html += '<p class="muted">' + tabName + "</p>";
+  html += "<h3>中文原文</h3><pre class=\"light\">" + esc(it.chinese || "") + "</pre>";
+  html += '<h3>你的译文</h3><p class="muted">先自己翻译，写完再点自查。</p>';
+  html += '<textarea id="tr-my" oninput="trMyDraft=this.value" placeholder="在这里写你的英文译文……">' + esc(trMyDraft) + "</textarea>";
+  html += '<div style="margin-top:8px"><button class="btn" onclick="trChecked=true;renderPractice()" ' + (trChecked ? "disabled" : "") + '>自查</button></div>';
+  if (trChecked) {
+    html += '<div class="answer-box open"><h3>参考译文</h3><pre class="light">' + esc(it.reference || "") + "</pre>";
+    html += "<h3>逐句解析</h3>";
+    (it.sentences || []).forEach(function (s, i) {
+      html += '<div class="explain-sec"><p><b>第 ' + (i + 1) + " 句：</b>" + esc(s.zh || "") + "</p><p>" + esc(s.en || "") + "</p>" + (s.note ? '<p class="muted">' + esc(s.note) + "</p>" : "") + "</div>";
+    });
+    html += curTrTab === "mock" ? "<h3>本话题生词</h3><p class=\"muted\">生词按话题汇总，不一定都出现在这段正文里。</p>" : "<h3>生词汇总</h3>";
+    (it.words || []).forEach(function (w) {
+      html += '<div class="dict-row"><b>' + esc(w.word) + '</b> <span style="color:var(--accent)">' + esc(w.pos || "") + "</span> " + esc(w.meaning || "") + '<div><button class="btn ghost small" onclick="speakWordTwice(\'' + esc(w.word).replace(/'/g, "\\'") + '\')">读音</button></div></div>';
+    });
+    html += "<h3>句式考点</h3>";
+    (it.patterns || []).forEach(function (p) {
+      html += '<div class="explain-sec"><p>' + esc(patternText(p)) + "</p></div>";
+    });
+    html += '<button class="btn ghost small" onclick="addMistakeFromTranslation(\'' + curTrTab + "','" + esc(it.id).replace(/'/g, "\\'") + '\')">加入错题库</button>';
+    html += "</div>";
+  }
+  html += "</div>";
+  return html;
+}
+function addMistakeFromTranslation(tab, id) {
+  var it = trFind(tab, id);
+  if (!it) return;
+  var my = trMyDraft ? trMyDraft.trim() : "";
+  openMistakeForm({
+    module: "translation",
+    title: (tab === "real" ? "翻译真题 · " : "翻译模拟题 · ") + (it.source || ""),
+    question: it.chinese || "",
+    myAnswer: my || "（未写译文）",
+    correctAnswer: it.reference || ""
+  });
+}
+</script>
+
+<script>
 /* ============ 练习题库 ============ */
 var curPracticeModule = "listening";
 var practiceAnswers = {}; /* qid -> letter */
@@ -1155,6 +1194,11 @@ function renderPractice() {
   }
   if (curPracticeModule === "reading") {
     html += curREpisode ? renderReadingEpisode() : renderReadingHome();
+    $("view-practice").innerHTML = html;
+    return;
+  }
+  if (curPracticeModule === "translation") {
+    html += curTrItem ? renderTranslationDetail() : renderTranslationHome();
     $("view-practice").innerHTML = html;
     return;
   }
@@ -1186,8 +1230,9 @@ function renderPractice() {
         html += "</div>";
       }
     } else {
-      /* 写作题：查看范文 */
-      html += '<button class="btn ghost small" onclick="this.nextElementSibling.classList.toggle(\'open\')">查看范文与点评</button>';
+      /* 写作题：先自己写，再自查看范文（跟翻译板块一样的流程） */
+      html += '<label>先自己写一遍（写完再点自查）</label><textarea id="essay-' + q.id + '" placeholder="在这里写你的作文……"></textarea>';
+      html += '<button class="btn ghost small" onclick="this.nextElementSibling.classList.toggle(\'open\')">自查：查看范文与点评</button>';
       html += '<div class="answer-box"><div class="right-ans"><b>范文：</b></div><pre class="light">' + esc(q.answer || "") + '</pre><p>' + esc(q.explain || "") + "</p></div>";
     }
     html += "</div>";
