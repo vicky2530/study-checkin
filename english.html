@@ -11,6 +11,9 @@
 <script src="eng-reading-basic.js"></script>
 <script src="eng-reading-advanced.js"></script>
 <script src="eng-reading-exam.js"></script>
+<script src="eng-cloze-basic.js"></script>
+<script src="eng-cloze-advanced.js"></script>
+<script src="eng-cloze-real.js"></script>
 <script src="eng-lessons.js"></script>
 <script src="eng-translation.js"></script>
 <style>
@@ -92,6 +95,17 @@
   .tap-word:hover { color: var(--primary); border-bottom-color: var(--primary); }
   .tap-word.mark-hl { background: rgba(255, 233, 110, 0.55); }
   .tap-word.mark-ul { border-bottom: 2px solid var(--primary); }
+  .cloze-blank { display: inline-block; min-width: 64px; padding: 1px 8px; margin: 0 2px; border: 1px dashed #8a8fb0; border-radius: 6px; background: #f0f1f8; color: var(--primary-dark); font-family: Georgia, "Times New Roman", serif; font-size: 15px; cursor: pointer; vertical-align: baseline; }
+  .cloze-blank:hover { border-color: var(--primary); background: var(--primary-light); }
+  .cloze-blank.sel { border-style: solid; border-color: var(--primary); background: var(--primary-light); font-weight: bold; }
+  .cloze-blank.filled { border-style: solid; border-color: var(--primary); background: #fff; }
+  .cloze-blank.right { border-color: var(--green); background: #e3f2e9; color: var(--green); }
+  .cloze-blank.wrong { border-color: var(--red); background: #fbe7e7; color: var(--red); }
+  .bank-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .bank-word { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border); background: #fff; font-size: 14px; cursor: pointer; color: var(--text); }
+  .bank-word:hover { border-color: var(--primary); }
+  .bank-word.used { opacity: 0.45; background: #f0f1f8; }
+  .bank-word.used:hover { border-color: var(--primary); opacity: 0.75; }
   .pen-toolbar { position: sticky; top: 50px; z-index: 5; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .pen-toolbar .lbl { font-size: 13px; color: var(--muted); margin-right: 2px; }
   .pen-toolbar button { padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; color: var(--muted); cursor: pointer; }
@@ -167,6 +181,8 @@ var KEY_MISTAKES = "eng-mistakes";
 var KEY_LWORDS = "eng-listening-words";
 var KEY_RWORDS = "eng-reading-words";
 var KEY_RMARKS = "eng-reading-marks";
+var KEY_CWORDS = "eng-cloze-words";
+var KEY_CMARKS = "eng-cloze-marks";
 
 /* 迁移唯一一条旧数据：听力生词 inquiry（basic 第1期，n.，询问，未掌握） */
 (function seedListeningWord() {
@@ -331,6 +347,42 @@ function setEpisodeMarks(edition, episode, marks) {
 }
 function countEpisodeMarks(edition, episode) {
   var marks = getEpisodeMarks(edition, episode);
+  var n = 0;
+  Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
+  return n;
+}
+
+/* ============ 选词填空生词与标记（key：eng-cloze-words / eng-cloze-marks，与阅读分开存） ============ */
+function getClozeWords() { return loadJSON(KEY_CWORDS, []); }
+function addClozeWord(edition, episode, word, pos, meaning) {
+  var list = getClozeWords();
+  var key = String(word || "").toLowerCase();
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].word || "").toLowerCase() === key && list[i].edition === edition && list[i].episode === episode) return list[i];
+  }
+  var item = { id: uid(), edition: edition, episode: episode, word: word, pos: pos || "", meaning: meaning || "", mastered: false, createdAt: new Date().toISOString() };
+  list.unshift(item);
+  saveJSON(KEY_CWORDS, list);
+  return item;
+}
+function setCWordMastered(id, mastered) {
+  var list = getClozeWords();
+  for (var i = 0; i < list.length; i++) { if (list[i].id === id) list[i].mastered = mastered; }
+  saveJSON(KEY_CWORDS, list);
+}
+function deleteCWord(id) { saveJSON(KEY_CWORDS, getClozeWords().filter(function (x) { return x.id !== id; })); }
+function getClozeMarks() { return loadJSON(KEY_CMARKS, {}); }
+function getClozeEpisodeMarks(edition, episode) {
+  var all = getClozeMarks();
+  return all[marksKey(edition, episode)] || {};
+}
+function setClozeEpisodeMarks(edition, episode, marks) {
+  var all = getClozeMarks();
+  all[marksKey(edition, episode)] = marks;
+  saveJSON(KEY_CMARKS, all);
+}
+function countClozeMarks(edition, episode) {
+  var marks = getClozeEpisodeMarks(edition, episode);
   var n = 0;
   Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
   return n;
@@ -1061,6 +1113,295 @@ function readingWordsHomeHTML() {
 </script>
 
 <script>
+/* ============ 选词填空 ============ */
+var C_VERSIONS = [
+  { id: "basic", name: "基础版" },
+  { id: "advanced", name: "进阶版" },
+  { id: "exam", name: "四级真题版" }
+];
+var curCVersion = "basic";
+var curClozeEpisode = null; /* episode no */
+var cFills = {}; /* blankIdx 0-9 -> bank letter A-O */
+var cShowAnswers = false;
+var curClozeBlank = 0; /* 当前选中的空 0-9 */
+var cPage = 1;
+var C_PAGE_SIZE = 10;
+
+function clozeData(version) {
+  if (version === "basic") return window.ENG_CLOZE_BASIC || [];
+  if (version === "advanced") return window.ENG_CLOZE_ADVANCED || [];
+  return window.ENG_CLOZE_REAL || [];
+}
+function clozeEpisode(version, no) {
+  var eps = clozeData(version);
+  for (var i = 0; i < eps.length; i++) { if (eps[i].no === no) return eps[i]; }
+  return null;
+}
+function clozeVersionName(id) {
+  for (var i = 0; i < C_VERSIONS.length; i++) { if (C_VERSIONS[i].id === id) return C_VERSIONS[i].name; }
+  return id;
+}
+function clozeBankLetter(i) { return "ABCDEFGHIJKLMNO"[i]; }
+
+function renderClozeHome() {
+  var html = '<div class="chips">';
+  C_VERSIONS.forEach(function (v) {
+    html += '<button class="' + (v.id === curCVersion ? "active" : "") + '" onclick="curCVersion=\'' + v.id + '\';curClozeEpisode=null;cShowAnswers=false;cFills={};curClozeBlank=0;cPage=1;renderPractice()">' + esc(v.name) + "</button>";
+  });
+  html += "</div>";
+  var eps = clozeData(curCVersion);
+  var intro = curCVersion === "exam"
+    ? "往年四级选词填空真题，每篇标明年份和套数，原文、词库和答案逐篇核对过出处。"
+    : "按四级选词填空标准自编的模拟题，明确标注为自编模拟题，不是真题。每篇 10 个空、词库 15 个词。";
+  html += '<div class="card"><h2>' + esc(clozeVersionName(curCVersion)) + " · 共 " + eps.length + ' 篇</h2><p class="muted">' + esc(intro) + "</p></div>";
+  var total = eps.length;
+  var pages = Math.max(1, Math.ceil(total / C_PAGE_SIZE));
+  if (cPage > pages) cPage = pages;
+  var start = (cPage - 1) * C_PAGE_SIZE;
+  var pageItems = eps.slice(start, start + C_PAGE_SIZE);
+  html += '<div class="card"><div class="ep-list">';
+  pageItems.forEach(function (ep) {
+    var label = "第" + ep.no + "篇 · " + ep.title + (ep.source ? "（" + ep.source + "）" : "");
+    html += '<div class="ep-item" onclick="curClozeEpisode=' + ep.no + ';cShowAnswers=false;cFills={};curClozeBlank=0;renderPractice()"><span>' + esc(label) + '</span><span class="muted">10 空 ›</span></div>';
+  });
+  html += "</div>";
+  if (pages > 1) {
+    html += '<div style="margin-top:10px"><button class="btn ghost small" onclick="cPage=Math.max(1,cPage-1);renderPractice()" ' + (cPage <= 1 ? "disabled" : "") + ">上一页</button> ";
+    html += '<span class="muted">第 ' + cPage + " / " + pages + " 页</span> ";
+    html += '<button class="btn ghost small" onclick="cPage=Math.min(' + pages + ',cPage+1);renderPractice()" ' + (cPage >= pages ? "disabled" : "") + ">下一页</button></div>";
+  }
+  html += "</div>";
+  html += clozeWordsHomeHTML();
+  return html;
+}
+
+/* 选词填空文章渲染：单词是正常文字、只留虚线下划线（复用 tap-word 样式，绝不包方框）；{{26}}…{{35}} 渲染为空位按钮 */
+function clozePassageHTML(text, edition, episode) {
+  var marks = getClozeEpisodeMarks(edition, episode);
+  var pmarks = marks["0"] || {};
+  var parts = String(text || "").split("\n");
+  var out = "";
+  parts.forEach(function (para, paraIdx) {
+    if (!para.trim()) return;
+    out += '<p class="passage">';
+    var re = /\{\{(\d+)\}\}|[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s{}]+|\s+/g;
+    var m;
+    var wIdx = 0;
+    while ((m = re.exec(para)) !== null) {
+      var tok = m[0];
+      if (m[1]) {
+        var num = +m[1];
+        var bi = num - 26;
+        var letter = cFills[String(bi)];
+        var cls = "cloze-blank";
+        if (bi === curClozeBlank) cls += " sel";
+        if (letter) cls += " filled";
+        if (cShowAnswers) {
+          var ep = clozeEpisode(edition, episode);
+          var rightLetter = ep && ep.blanks[bi] ? ep.blanks[bi].answer : "";
+          cls += (letter === rightLetter) ? " right" : " wrong";
+        }
+        var label = letter ? esc(letter) : String(num);
+        out += '<button class="' + cls + '" onclick="curClozeBlank=' + bi + ';renderPractice()">' + label + "</button>";
+      } else if (/^[A-Za-z]/.test(tok)) {
+        var key = paraIdx + ":" + wIdx;
+        var mk = pmarks[key] || "";
+        var wcls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
+        out += '<span class="' + wcls + '" onclick="tapWordOrMarkCloze(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
+        wIdx++;
+      } else {
+        out += esc(tok);
+      }
+    }
+    out += "</p>";
+  });
+  return out;
+}
+function tapWordOrMarkCloze(word, edition, episode, paraIdx, wIdx) {
+  if (penMode === "lookup") { tapWordCloze(word, edition, episode); return; }
+  var marks = getClozeEpisodeMarks(edition, episode);
+  if (!marks["0"]) marks["0"] = {};
+  var key = paraIdx + ":" + wIdx;
+  if (penMode === "eraser") {
+    delete marks["0"][key];
+  } else {
+    var kind = penMode === "hl" ? "hl" : "ul";
+    if (marks["0"][key] === kind) delete marks["0"][key];
+    else marks["0"][key] = kind;
+  }
+  if (Object.keys(marks["0"]).length === 0) delete marks["0"];
+  setClozeEpisodeMarks(edition, episode, marks);
+  rerenderKeepScroll();
+}
+function clearAllClozeMarks(edition, episode) {
+  setClozeEpisodeMarks(edition, episode, {});
+  rerenderKeepScroll();
+}
+function tapWordCloze(word, edition, episode) {
+  var hit = lookupLocal(word);
+  var html = '<h2>' + esc(word) + "</h2>";
+  if (hit) {
+    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
+    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
+  } else {
+    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
+    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
+  }
+  html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
+  html += '<button class="btn" onclick="addClozeWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本期生词</button> ';
+  html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
+  openModal(html);
+}
+function addClozeWordFromTap(edition, episode, word) {
+  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
+  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
+  if (!p || !m) { alert("词性和中文都要填。"); return; }
+  addClozeWord(edition, episode, word, p, m);
+  closeModal();
+  renderPractice();
+}
+
+function renderClozeEpisode() {
+  var ep = clozeEpisode(curCVersion, curClozeEpisode);
+  if (!ep) return renderClozeHome();
+  var vname = clozeVersionName(curCVersion);
+  var html = '<button class="btn ghost" onclick="curClozeEpisode=null;cShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
+  var markCount = countClozeMarks(curCVersion, ep.no);
+  html += '<div class="pen-toolbar"><span class="lbl">标记笔：</span>';
+  html += '<button class="' + (penMode === "lookup" ? "active" : "") + '" onclick="setPenMode(\'lookup\')">点词查词</button>';
+  html += '<button class="' + (penMode === "hl" ? "active" : "") + '" onclick="setPenMode(\'hl\')">荧光笔</button>';
+  html += '<button class="' + (penMode === "ul" ? "active" : "") + '" onclick="setPenMode(\'ul\')">下划线笔</button>';
+  html += '<button class="' + (penMode === "eraser" ? "active" : "") + '" onclick="setPenMode(\'eraser\')">橡皮</button>';
+  html += '<button onclick="clearAllClozeMarks(\'' + curCVersion + "'," + ep.no + ')" ' + (markCount ? "" : "disabled") + ">清除全部标记（" + markCount + "）</button>";
+  html += "</div>";
+  html += '<div class="card"><h2>' + esc(vname) + " 第" + ep.no + "篇" + (ep.source ? " · " + esc(ep.source) : "") + "</h2>";
+  html += "<h3>" + esc(ep.title) + "</h3>";
+  html += '<p class="muted">点一个空（26–35），再点下方词库里的词填进去；每个词只能用一次，已用的词点一下可以移到当前选中的空。</p>';
+  html += clozePassageHTML(ep.text, curCVersion, ep.no);
+  html += "<h3>词库（A–O）</h3>";
+  html += '<div class="bank-grid">';
+  (ep.bank || []).forEach(function (w, i) {
+    var letter = clozeBankLetter(i);
+    var used = false;
+    Object.keys(cFills).forEach(function (k) { if (cFills[k] === letter) used = true; });
+    html += '<button class="bank-word' + (used ? " used" : "") + '" onclick="fillClozeBlank(\'' + letter + '\')" ' + (cShowAnswers ? "disabled" : "") + ">" + letter + ". " + esc(w) + "</button>";
+  });
+  html += "</div>";
+  html += '<div><button class="btn ghost small" onclick="clearClozeBlank();renderPractice()" ' + (cShowAnswers || !cFills[String(curClozeBlank)] ? "disabled" : "") + ">清除当前空（第 " + (curClozeBlank + 26) + " 空）</button></div>";
+  html += '<div style="margin-top:12px"><button class="btn" onclick="cShowAnswers=true;renderPractice()" ' + (cShowAnswers ? "disabled" : "") + '>自查</button></div>';
+  if (cShowAnswers) {
+    var right = 0, total = 0;
+    html += '<div class="answer-box open"><h3>本篇答案与解析</h3>';
+    (ep.blanks || []).forEach(function (b, i) {
+      var mine = cFills[String(i)] || "未作答";
+      total++;
+      if (mine === b.answer) right++;
+      var mineWord = "";
+      if (mine && "ABCDEFGHIJKLMNO".indexOf(mine) >= 0) mineWord = ep.bank["ABCDEFGHIJKLMNO".indexOf(mine)];
+      html += "<p><b>第" + (26 + i) + "空：正确答案为 " + esc(b.answer) + "（" + esc(b.word) + "，" + esc(b.pos || "") + "）</b></p><p>" + esc(b.analysis || "") + "</p>";
+      html += mine === b.answer ? '<p class="done-mark">你答对了</p>' : '<p style="color:var(--red)">你答错了（你选 ' + esc(mine) + (mineWord ? ". " + esc(mineWord) : "") + "，正确答案 " + esc(b.answer) + ". " + esc(b.word) + "）</p>";
+      if (mine !== b.answer) {
+        html += '<button class="btn ghost small" onclick="addMistakeFromCloze(\'' + curCVersion + "'," + ep.no + "," + i + ')">加入错题库</button>';
+      }
+    });
+    html += '<p class="muted">本篇答对 ' + right + " / " + total + " 空</p></div>";
+  }
+  html += "</div>";
+  html += clozeWordsEpisodeHTML(curCVersion, ep.no);
+  return html;
+}
+function fillClozeBlank(letter) {
+  if (cShowAnswers) return;
+  /* 已用的词移到当前选中的空 */
+  Object.keys(cFills).forEach(function (k) { if (cFills[k] === letter) delete cFills[k]; });
+  cFills[String(curClozeBlank)] = letter;
+  /* 前进到下一个未填的空 */
+  var next = -1;
+  for (var i = 0; i < 10; i++) {
+    var idx = (curClozeBlank + 1 + i) % 10;
+    if (!cFills[String(idx)]) { next = idx; break; }
+  }
+  if (next >= 0) curClozeBlank = next;
+  renderPractice();
+}
+function clearClozeBlank() {
+  delete cFills[String(curClozeBlank)];
+}
+function addMistakeFromCloze(version, epNo, bi) {
+  var ep = clozeEpisode(version, epNo);
+  if (!ep) return;
+  var b = ep.blanks[bi];
+  var mine = cFills[String(bi)] || "未作答";
+  var mineWord = "";
+  if (mine && "ABCDEFGHIJKLMNO".indexOf(mine) >= 0) mineWord = ep.bank["ABCDEFGHIJKLMNO".indexOf(mine)];
+  var bankText = (ep.bank || []).map(function (w, i) { return clozeBankLetter(i) + ". " + w; }).join("  ");
+  openMistakeForm({
+    module: "cloze",
+    title: "选词填空 第" + epNo + "篇 第" + (26 + bi) + "空",
+    question: "《" + ep.title + "》第" + (26 + bi) + "空\n词库：" + bankText,
+    myAnswer: mine + (mineWord ? ". " + mineWord : ""),
+    correctAnswer: b.answer + ". " + b.word
+  });
+}
+function clozeWordsEpisodeHTML(edition, episode) {
+  var words = getClozeWords().filter(function (x) { return x.edition === edition && x.episode === episode; });
+  var html = '<div class="card"><h2>本篇生词汇总</h2><p class="muted">点文章里的单词可以直接记入，也可以手动输入英文单词。</p>';
+  html += '<input type="text" id="cw-input" placeholder="输入英文单词">';
+  html += '<input type="text" id="cw-pos" placeholder="词性"><input type="text" id="cw-mean" placeholder="中文意思">';
+  html += '<button class="btn small" onclick="cwAutoFill()">查词性+中文</button> ';
+  html += '<button class="btn small" onclick="cwAdd(\'' + edition + "'," + episode + ')">记入本篇生词</button>';
+  if (!words.length) html += '<p class="muted">本篇还没有记生词。</p>';
+  words.forEach(function (x) {
+    html += '<div class="dict-row"><b>' + esc(x.word) + '</b> <span style="color:var(--accent)">' + esc(x.pos || "") + "</span> " + esc(x.meaning || "") + (x.mastered ? ' <span class="done-mark">已掌握</span>' : "");
+    html += '<div><button class="btn ghost small" onclick="speakWordTwice(\'' + esc(x.word).replace(/'/g, "\\'") + '\')">读音</button><button class="btn ghost small" onclick="setCWordMastered(\'' + x.id + "'," + (!x.mastered) + ');renderPractice()">' + (x.mastered ? "取消已掌握" : "标为已掌握") + '</button><button class="btn danger small" onclick="deleteCWord(\'' + x.id + '\');renderPractice()">删除</button></div></div>';
+  });
+  html += "</div>";
+  return html;
+}
+function cwAutoFill() {
+  var w = $("cw-input").value.trim();
+  if (!w) { alert("先输入英文单词。"); return; }
+  var hit = lookupLocal(w);
+  if (hit) { $("cw-pos").value = hit.pos || ""; $("cw-mean").value = hit.meaning || ""; }
+  else alert("本地词典里没有这个词，请自己填词性和中文。");
+}
+function cwAdd(edition, episode) {
+  var w = $("cw-input").value.trim();
+  var p = $("cw-pos").value.trim();
+  var m = $("cw-mean").value.trim();
+  if (!w) { alert("先输入英文单词。"); return; }
+  if (!p || !m) { var hit = lookupLocal(w); if (hit) { p = p || hit.pos || ""; m = m || hit.meaning || ""; } }
+  if (!p || !m) { alert("词性和中文都要填（可以点“查词性+中文”自动填，查不到就自己填）。"); return; }
+  addClozeWord(edition, episode, w, p, m);
+  renderPractice();
+}
+function clozeWordsHomeHTML() {
+  var all = getClozeWords();
+  var html = '<div class="card"><h2>生词汇总</h2><p class="muted">选一篇，看那篇记下的全部生词。</p>';
+  html += '<select id="cw-home-sel" onchange="window.__cwHomeEp=this.value;renderPractice()">';
+  C_VERSIONS.forEach(function (v) {
+    var eps = clozeData(v.id);
+    eps.forEach(function (ep) {
+      var sel = (window.__cwHomeEp === v.id + "-" + ep.no) ? " selected" : "";
+      html += '<option value="' + v.id + "-" + ep.no + '"' + sel + ">" + esc(v.name) + " 第" + ep.no + "篇</option>";
+    });
+  });
+  html += "</select>";
+  var selVal = window.__cwHomeEp || (curCVersion + "-1");
+  var parts = selVal.split("-");
+  var ed = parts[0], epNo = +parts[1];
+  var words = all.filter(function (x) { return x.edition === ed && x.episode === epNo; });
+  if (!words.length) html += "<p class=\"muted\">这篇还没有记生词。</p>";
+  words.forEach(function (x) {
+    html += '<div class="dict-row"><b>' + esc(x.word) + '</b> <span style="color:var(--accent)">' + esc(x.pos || "") + "</span> " + esc(x.meaning || "") + (x.mastered ? ' <span class="done-mark">已掌握</span>' : "");
+    html += '<div><button class="btn ghost small" onclick="speakWordTwice(\'' + esc(x.word).replace(/'/g, "\\'") + '\')">读音</button><button class="btn ghost small" onclick="setCWordMastered(\'' + x.id + "'," + (!x.mastered) + ');renderPractice()">' + (x.mastered ? "取消已掌握" : "标为已掌握") + '</button><button class="btn danger small" onclick="deleteCWord(\'' + x.id + '\');renderPractice()">删除</button></div></div>';
+  });
+  html += "</div>";
+  return html;
+}
+</script>
+
+<script>
 /* ============ 翻译（真题 / 模拟题两板块） ============ */
 var curTrTab = "real"; /* "real" 真题 | "mock" 模拟题 */
 var curTrItem = null; /* 题目 id */
@@ -1199,6 +1540,11 @@ function renderPractice() {
   }
   if (curPracticeModule === "translation") {
     html += curTrItem ? renderTranslationDetail() : renderTranslationHome();
+    $("view-practice").innerHTML = html;
+    return;
+  }
+  if (curPracticeModule === "cloze") {
+    html += curClozeEpisode ? renderClozeEpisode() : renderClozeHome();
     $("view-practice").innerHTML = html;
     return;
   }
