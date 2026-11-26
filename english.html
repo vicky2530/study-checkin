@@ -1551,23 +1551,17 @@ function clearAllMatchingMarks(edition, episode) {
 }
 function tapWordMatching(word, edition, episode) {
   var hit = lookupLocal(word);
-  var html = '<h2>' + esc(word) + "</h2>";
-  if (hit) {
-    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
-    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
-  } else {
-    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
-    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
-  }
+  var html = wordCardHTML(word, hit);
   html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
   html += '<button class="btn" onclick="addMatchingWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本篇生词</button> ';
   html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
   openModal(html);
 }
 function addMatchingWordFromTap(edition, episode, word) {
-  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
-  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
-  if (!p || !m) { alert("词性和中文都要填。"); return; }
+  var hit = lookupLocal(word);
+  var p = hit ? hit.pos : "";
+  var m = hit ? hit.meaning : "";
+  if (!p || !m) { window.open("https://dict.youdao.com/result?word=" + encodeURIComponent(word), "_blank", "noopener"); return; }
   addMatchingWord(edition, episode, word, p, m);
   closeModal();
   renderPractice();
