@@ -43,6 +43,9 @@
   header { background: linear-gradient(135deg, #5b6abf, #7c6bb0); color: #fff; padding: 20px 16px; text-align: center; }
   header h1 { font-size: 22px; letter-spacing: 2px; }
   header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+  .app-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .app-links a { color: #fff; border: 1px solid rgba(255,255,255,.65); border-radius: 7px; padding: 5px 10px; font-size: 13px; text-decoration: none; }
+  .app-links a:hover { background: rgba(255,255,255,.14); }
   nav.tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
   nav.tabs button { flex: 1; padding: 13px 4px; border: none; background: none; font-size: 15px; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; }
   nav.tabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: bold; }
@@ -155,6 +158,7 @@
 </head>
 <body>
 <header>
+  <div class="app-links"><a href="subject.html?name=%E8%8B%B1%E8%AF%AD%E5%9B%9B%E7%BA%A7">返回英语四级</a><a href="index.html">返回打卡页</a></div>
   <h1>英语四级学习</h1>
   <p id="overview">四级核心词汇 · 听力 · 阅读 · 写作翻译 · 错题库</p>
 </header>
@@ -2248,7 +2252,16 @@ window.addEventListener("load", function () {
   if (!dataReady()) {
     $("view-learn").innerHTML = '<div class="card"><h2>数据文件未加载完全</h2><p>请确认 eng-words.js、eng-listening-*.js、eng-reading-*.js、eng-cloze-*.js、eng-matching-*.js、eng-lessons.js 与 english.html 在同一目录下。</p></div>';
   }
-  renderLearn();
+  var section = new URLSearchParams(window.location.search).get("section") || "";
+  var practiceSections = { listening: "listening", reading: "reading", writing: "writing", translation: "translation" };
+  if (section === "words") {
+    switchTab("words");
+  } else if (practiceSections[section]) {
+    curPracticeModule = practiceSections[section];
+    switchTab("practice");
+  } else {
+    renderLearn();
+  }
 });
 </script>
 </body>

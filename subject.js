@@ -102,19 +102,20 @@ if (moduleNames.length) {
       link.className = 'module-entry';
       if (subject === '地基' && name === 'C语言') {
         link.href = 'c.html';
+      } else if (subject === '英语四级') {
+        var englishSections = {
+          '单词': 'words',
+          '听力': 'listening',
+          '阅读': 'reading',
+          '写作翻译': 'writing'
+        };
+        link.href = 'english.html?section=' + englishSections[name];
       } else {
         link.href = 'subject.html?name=' + encodeURIComponent(subject) + '&module=' + encodeURIComponent(name);
       }
       link.textContent = name;
       moduleEntries.appendChild(link);
     });
-    if (subject === '英语四级') {
-      var englishLink = document.createElement('a');
-      englishLink.className = 'module-entry';
-      englishLink.href = 'english.html';
-      englishLink.textContent = '英语四级学习';
-      moduleEntries.appendChild(englishLink);
-    }
   }
 }
 var darkMode = localStorage.getItem('theme-preference') === 'dark';
