@@ -16,6 +16,7 @@
 <script src="eng-cloze-real.js"></script>
 <script src="eng-lessons.js"></script>
 <script src="eng-translation.js"></script>
+<script src="eng-dict.js"></script>
 <style>
   :root {
     --primary: #5b6abf;
@@ -95,6 +96,10 @@
   .tap-word:hover { color: var(--primary); border-bottom-color: var(--primary); }
   .tap-word.mark-hl { background: rgba(255, 233, 110, 0.55); }
   .tap-word.mark-ul { border-bottom: 2px solid var(--primary); }
+  .passage-wrap { position: relative; }
+  .draw-layer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 2; touch-action: none; }
+  .draw-layer.active { pointer-events: auto; cursor: crosshair; }
+  .draw-stroke { fill: none; stroke: #5968b8; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; opacity: .88; vector-effect: non-scaling-stroke; }
   .cloze-blank { display: inline-block; min-width: 64px; padding: 1px 8px; margin: 0 2px; border: 1px dashed #8a8fb0; border-radius: 6px; background: #f0f1f8; color: var(--primary-dark); font-family: Georgia, "Times New Roman", serif; font-size: 15px; cursor: pointer; vertical-align: baseline; }
   .cloze-blank:hover { border-color: var(--primary); background: var(--primary-light); }
   .cloze-blank.sel { border-style: solid; border-color: var(--primary); background: var(--primary-light); font-weight: bold; }
@@ -231,6 +236,10 @@ function buildDict() {
       if (k && !LOCAL_DICT[k]) LOCAL_DICT[k] = { pos: ws[i].pos, meaning: ws[i].meaning, phon: ws[i].phon };
     }
   }
+  var corpus = window.ENG_CORPUS_DICT || {};
+  Object.keys(corpus).forEach(function (word) {
+    if (!LOCAL_DICT[word]) LOCAL_DICT[word] = corpus[word];
+  });
   return LOCAL_DICT;
 }
 function lookupLocal(word) {
@@ -345,11 +354,34 @@ function setEpisodeMarks(edition, episode, marks) {
   all[marksKey(edition, episode)] = marks;
   saveJSON(KEY_RMARKS, all);
 }
+function getFreehand(edition, episode, passageIndex, cloze) {
+  var all = cloze ? getClozeMarks() : getReadingMarks();
+  var k = marksKey(edition, episode);
+  var item = all[k] || {};
+  return item._freehand && item._freehand[String(passageIndex)] || [];
+}
+function countFreehand(edition, episode, cloze) {
+  var all = cloze ? getClozeMarks() : getReadingMarks();
+  var entry = all[marksKey(edition, episode)] || {};
+  var total = 0;
+  Object.keys(entry._freehand || {}).forEach(function (pi) { total += entry._freehand[pi].length; });
+  return total;
+}
+function setFreehand(edition, episode, passageIndex, strokes, cloze) {
+  var all = cloze ? getClozeMarks() : getReadingMarks();
+  var k = marksKey(edition, episode);
+  if (!all[k]) all[k] = {};
+  if (!all[k]._freehand) all[k]._freehand = {};
+  if (strokes.length) all[k]._freehand[String(passageIndex)] = strokes;
+  else delete all[k]._freehand[String(passageIndex)];
+  if (!Object.keys(all[k]._freehand).length) delete all[k]._freehand;
+  saveJSON(cloze ? KEY_CMARKS : KEY_RMARKS, all);
+}
 function countEpisodeMarks(edition, episode) {
   var marks = getEpisodeMarks(edition, episode);
   var n = 0;
-  Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
-  return n;
+  Object.keys(marks).forEach(function (pi) { if (pi !== "_freehand") n += Object.keys(marks[pi]).length; });
+  return n + countFreehand(edition, episode, false);
 }
 
 /* ============ 选词填空生词与标记（key：eng-cloze-words / eng-cloze-marks，与阅读分开存） ============ */
@@ -384,8 +416,8 @@ function setClozeEpisodeMarks(edition, episode, marks) {
 function countClozeMarks(edition, episode) {
   var marks = getClozeEpisodeMarks(edition, episode);
   var n = 0;
-  Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
-  return n;
+  Object.keys(marks).forEach(function (pi) { if (pi !== "_freehand") n += Object.keys(marks[pi]).length; });
+  return n + countFreehand(edition, episode, true);
 }
 
 /* ============ 页签切换 ============ */
@@ -904,7 +936,7 @@ function tappableHTML(text, edition, episode, pi) {
   var out = "";
   parts.forEach(function (para, paraIdx) {
     if (!para.trim()) return;
-    out += '<p class="passage">';
+    out += '<div class="passage-wrap"><p class="passage">';
     var re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s]+|\s+/g;
     var m;
     var wIdx = 0;
@@ -920,7 +952,7 @@ function tappableHTML(text, edition, episode, pi) {
         out += esc(tok);
       }
     }
-    out += "</p>";
+    out += '</p>' + freehandSVGHTML(edition, episode, pi, false) + "</div>";
   });
   return out;
 }
@@ -946,7 +978,53 @@ function tapWordOrMark(word, edition, episode, pi, paraIdx, wIdx) {
 function setPenMode(mode) {
   penMode = mode;
   renderPractice();
+  setTimeout(refreshFreehandLayers, 0);
 }
+function freehandSVGHTML(edition, episode, passageIndex, cloze) {
+  var strokes = getFreehand(edition, episode, passageIndex, cloze);
+  var paths = strokes.map(function (points) { return '<path class="draw-stroke" d="' + points + '"></path>'; }).join("");
+  return '<svg class="draw-layer' + (penMode === "ul" ? " active" : "") + '" data-edition="' + esc(edition) + '" data-episode="' + episode + '" data-passage="' + passageIndex + '" data-cloze="' + (cloze ? "1" : "0") + '" viewBox="0 0 1000 1000" preserveAspectRatio="none">' + paths + '</svg>';
+}
+function refreshFreehandLayers() {
+  var layers = document.querySelectorAll(".draw-layer");
+  for (var i = 0; i < layers.length; i++) layers[i].classList.toggle("active", penMode === "ul");
+}
+var activeStroke = null;
+function freehandPoint(event, svg) {
+  var rect = svg.getBoundingClientRect();
+  var x = Math.max(0, Math.min(1000, (event.clientX - rect.left) / rect.width * 1000));
+  var y = Math.max(0, Math.min(1000, (event.clientY - rect.top) / rect.height * 1000));
+  return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+}
+document.addEventListener("pointerdown", function (event) {
+  var svg = event.target.closest && event.target.closest(".draw-layer.active");
+  if (!svg || (event.pointerType === "mouse" && event.button !== 0)) return;
+  event.preventDefault();
+  svg.setPointerCapture(event.pointerId);
+  var p = freehandPoint(event, svg);
+  activeStroke = { svg: svg, edition: svg.dataset.edition, episode: +svg.dataset.episode, passage: +svg.dataset.passage, cloze: svg.dataset.cloze === "1", points: [p], path: document.createElementNS("http://www.w3.org/2000/svg", "path") };
+  activeStroke.path.setAttribute("class", "draw-stroke");
+  svg.appendChild(activeStroke.path);
+  activeStroke.path.setAttribute("d", "M" + p[0] + " " + p[1]);
+});
+document.addEventListener("pointermove", function (event) {
+  if (!activeStroke) return;
+  var p = freehandPoint(event, activeStroke.svg);
+  activeStroke.points.push(p);
+  activeStroke.path.setAttribute("d", activeStroke.points.map(function (xy, i) { return (i ? "L" : "M") + xy[0] + " " + xy[1]; }).join(" "));
+});
+function finishFreehand() {
+  if (!activeStroke) return;
+  var data = activeStroke;
+  activeStroke = null;
+  if (data.points.length > 1) {
+    var strokes = getFreehand(data.edition, data.episode, data.passage, data.cloze);
+    strokes.push(data.path.getAttribute("d"));
+    setFreehand(data.edition, data.episode, data.passage, strokes, data.cloze);
+  } else data.path.remove();
+}
+document.addEventListener("pointerup", finishFreehand);
+document.addEventListener("pointercancel", finishFreehand);
 function clearAllMarks(edition, episode) {
   setEpisodeMarks(edition, episode, {});
   rerenderKeepScroll();
@@ -959,23 +1037,24 @@ function rerenderKeepScroll() {
 }
 function tapWord(word, edition, episode) {
   var hit = lookupLocal(word);
-  var html = '<h2>' + esc(word) + "</h2>";
-  if (hit) {
-    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
-    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
-  } else {
-    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
-    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
-  }
+  var html = wordCardHTML(word, hit);
   html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
   html += '<button class="btn" onclick="addReadingWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本期生词</button> ';
   html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
   openModal(html);
 }
+function wordCardHTML(word, hit) {
+  var html = '<h2>' + esc(word) + "</h2>";
+  if (hit) html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
+  else html += '<p class="muted">暂未收录该词条，可以发音或打开有道词典查询。</p><a class="btn ghost" target="_blank" rel="noopener" href="https://dict.youdao.com/result?word=' + encodeURIComponent(word) + '">去有道查词</a>';
+  html += '<button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button>';
+  return html;
+}
 function addReadingWordFromTap(edition, episode, word) {
-  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
-  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
-  if (!p || !m) { alert("词性和中文都要填。"); return; }
+  var hit = lookupLocal(word);
+  var p = hit ? hit.pos : "";
+  var m = hit ? hit.meaning : "";
+  if (!p || !m) { window.open("https://dict.youdao.com/result?word=" + encodeURIComponent(word), "_blank", "noopener"); return; }
   addReadingWord(edition, episode, word, p, m);
   closeModal();
   renderPractice();
@@ -1183,7 +1262,7 @@ function clozePassageHTML(text, edition, episode) {
   var out = "";
   parts.forEach(function (para, paraIdx) {
     if (!para.trim()) return;
-    out += '<p class="passage">';
+    out += '<div class="passage-wrap"><p class="passage">';
     var re = /\{\{(\d+)\}\}|[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s{}]+|\s+/g;
     var m;
     var wIdx = 0;
@@ -1213,7 +1292,7 @@ function clozePassageHTML(text, edition, episode) {
         out += esc(tok);
       }
     }
-    out += "</p>";
+    out += '</p>' + freehandSVGHTML(edition, episode, 0, true) + "</div>";
   });
   return out;
 }
@@ -1239,23 +1318,17 @@ function clearAllClozeMarks(edition, episode) {
 }
 function tapWordCloze(word, edition, episode) {
   var hit = lookupLocal(word);
-  var html = '<h2>' + esc(word) + "</h2>";
-  if (hit) {
-    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
-    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
-  } else {
-    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
-    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
-  }
+  var html = wordCardHTML(word, hit);
   html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
   html += '<button class="btn" onclick="addClozeWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本期生词</button> ';
   html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
   openModal(html);
 }
 function addClozeWordFromTap(edition, episode, word) {
-  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
-  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
-  if (!p || !m) { alert("词性和中文都要填。"); return; }
+  var hit = lookupLocal(word);
+  var p = hit ? hit.pos : "";
+  var m = hit ? hit.meaning : "";
+  if (!p || !m) { window.open("https://dict.youdao.com/result?word=" + encodeURIComponent(word), "_blank", "noopener"); return; }
   addClozeWord(edition, episode, word, p, m);
   closeModal();
   renderPractice();
