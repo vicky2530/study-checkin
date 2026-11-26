@@ -14,9 +14,11 @@
 <script src="eng-cloze-basic.js"></script>
 <script src="eng-cloze-advanced.js"></script>
 <script src="eng-cloze-real.js"></script>
+<script src="eng-matching-basic.js"></script>
+<script src="eng-matching-advanced.js"></script>
+<script src="eng-matching-real.js"></script>
 <script src="eng-lessons.js"></script>
 <script src="eng-translation.js"></script>
-<script src="eng-dict.js"></script>
 <style>
   :root {
     --primary: #5b6abf;
@@ -96,10 +98,6 @@
   .tap-word:hover { color: var(--primary); border-bottom-color: var(--primary); }
   .tap-word.mark-hl { background: rgba(255, 233, 110, 0.55); }
   .tap-word.mark-ul { border-bottom: 2px solid var(--primary); }
-  .passage-wrap { position: relative; }
-  .draw-layer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 2; touch-action: none; }
-  .draw-layer.active { pointer-events: auto; cursor: crosshair; }
-  .draw-stroke { fill: none; stroke: #5968b8; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; opacity: .88; vector-effect: non-scaling-stroke; }
   .cloze-blank { display: inline-block; min-width: 64px; padding: 1px 8px; margin: 0 2px; border: 1px dashed #8a8fb0; border-radius: 6px; background: #f0f1f8; color: var(--primary-dark); font-family: Georgia, "Times New Roman", serif; font-size: 15px; cursor: pointer; vertical-align: baseline; }
   .cloze-blank:hover { border-color: var(--primary); background: var(--primary-light); }
   .cloze-blank.sel { border-style: solid; border-color: var(--primary); background: var(--primary-light); font-weight: bold; }
@@ -188,6 +186,8 @@ var KEY_RWORDS = "eng-reading-words";
 var KEY_RMARKS = "eng-reading-marks";
 var KEY_CWORDS = "eng-cloze-words";
 var KEY_CMARKS = "eng-cloze-marks";
+var KEY_MWORDS = "eng-matching-words";
+var KEY_MMARKS = "eng-matching-marks";
 
 /* 迁移唯一一条旧数据：听力生词 inquiry（basic 第1期，n.，询问，未掌握） */
 (function seedListeningWord() {
@@ -236,10 +236,6 @@ function buildDict() {
       if (k && !LOCAL_DICT[k]) LOCAL_DICT[k] = { pos: ws[i].pos, meaning: ws[i].meaning, phon: ws[i].phon };
     }
   }
-  var corpus = window.ENG_CORPUS_DICT || {};
-  Object.keys(corpus).forEach(function (word) {
-    if (!LOCAL_DICT[word]) LOCAL_DICT[word] = corpus[word];
-  });
   return LOCAL_DICT;
 }
 function lookupLocal(word) {
@@ -354,34 +350,11 @@ function setEpisodeMarks(edition, episode, marks) {
   all[marksKey(edition, episode)] = marks;
   saveJSON(KEY_RMARKS, all);
 }
-function getFreehand(edition, episode, passageIndex, cloze) {
-  var all = cloze ? getClozeMarks() : getReadingMarks();
-  var k = marksKey(edition, episode);
-  var item = all[k] || {};
-  return item._freehand && item._freehand[String(passageIndex)] || [];
-}
-function countFreehand(edition, episode, cloze) {
-  var all = cloze ? getClozeMarks() : getReadingMarks();
-  var entry = all[marksKey(edition, episode)] || {};
-  var total = 0;
-  Object.keys(entry._freehand || {}).forEach(function (pi) { total += entry._freehand[pi].length; });
-  return total;
-}
-function setFreehand(edition, episode, passageIndex, strokes, cloze) {
-  var all = cloze ? getClozeMarks() : getReadingMarks();
-  var k = marksKey(edition, episode);
-  if (!all[k]) all[k] = {};
-  if (!all[k]._freehand) all[k]._freehand = {};
-  if (strokes.length) all[k]._freehand[String(passageIndex)] = strokes;
-  else delete all[k]._freehand[String(passageIndex)];
-  if (!Object.keys(all[k]._freehand).length) delete all[k]._freehand;
-  saveJSON(cloze ? KEY_CMARKS : KEY_RMARKS, all);
-}
 function countEpisodeMarks(edition, episode) {
   var marks = getEpisodeMarks(edition, episode);
   var n = 0;
-  Object.keys(marks).forEach(function (pi) { if (pi !== "_freehand") n += Object.keys(marks[pi]).length; });
-  return n + countFreehand(edition, episode, false);
+  Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
+  return n;
 }
 
 /* ============ 选词填空生词与标记（key：eng-cloze-words / eng-cloze-marks，与阅读分开存） ============ */
@@ -416,8 +389,44 @@ function setClozeEpisodeMarks(edition, episode, marks) {
 function countClozeMarks(edition, episode) {
   var marks = getClozeEpisodeMarks(edition, episode);
   var n = 0;
-  Object.keys(marks).forEach(function (pi) { if (pi !== "_freehand") n += Object.keys(marks[pi]).length; });
-  return n + countFreehand(edition, episode, true);
+  Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
+  return n;
+}
+
+/* ============ 长篇匹配生词与标记（key：eng-matching-words / eng-matching-marks，与阅读、选词填空分开存） ============ */
+function getMatchingWords() { return loadJSON(KEY_MWORDS, []); }
+function addMatchingWord(edition, episode, word, pos, meaning) {
+  var list = getMatchingWords();
+  var key = String(word || "").toLowerCase();
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].word || "").toLowerCase() === key && list[i].edition === edition && list[i].episode === episode) return list[i];
+  }
+  var item = { id: uid(), edition: edition, episode: episode, word: word, pos: pos || "", meaning: meaning || "", mastered: false, createdAt: new Date().toISOString() };
+  list.unshift(item);
+  saveJSON(KEY_MWORDS, list);
+  return item;
+}
+function setMWordMastered(id, mastered) {
+  var list = getMatchingWords();
+  for (var i = 0; i < list.length; i++) { if (list[i].id === id) list[i].mastered = mastered; }
+  saveJSON(KEY_MWORDS, list);
+}
+function deleteMWord(id) { saveJSON(KEY_MWORDS, getMatchingWords().filter(function (x) { return x.id !== id; })); }
+function getMatchingMarks() { return loadJSON(KEY_MMARKS, {}); }
+function getMatchingEpisodeMarks(edition, episode) {
+  var all = getMatchingMarks();
+  return all[marksKey(edition, episode)] || {};
+}
+function setMatchingEpisodeMarks(edition, episode, marks) {
+  var all = getMatchingMarks();
+  all[marksKey(edition, episode)] = marks;
+  saveJSON(KEY_MMARKS, all);
+}
+function countMatchingMarks(edition, episode) {
+  var marks = getMatchingEpisodeMarks(edition, episode);
+  var n = 0;
+  Object.keys(marks).forEach(function (pi) { n += Object.keys(marks[pi]).length; });
+  return n;
 }
 
 /* ============ 页签切换 ============ */
@@ -484,7 +493,7 @@ function renderLearn() {
     }
     html += "</div>";
   });
-  var lm = { listening: "去听力练习", reading: "去阅读练习" };
+  var lm = { listening: "去听力练习", reading: "去阅读练习", matching: "去长篇匹配练习" };
   if (lm[m.id]) {
     html += '<div class="card"><button class="btn" onclick="goPractice(\'' + m.id + '\')">' + lm[m.id] + " →</button></div>";
   }
@@ -936,7 +945,7 @@ function tappableHTML(text, edition, episode, pi) {
   var out = "";
   parts.forEach(function (para, paraIdx) {
     if (!para.trim()) return;
-    out += '<div class="passage-wrap"><p class="passage">';
+    out += '<p class="passage">';
     var re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s]+|\s+/g;
     var m;
     var wIdx = 0;
@@ -952,7 +961,7 @@ function tappableHTML(text, edition, episode, pi) {
         out += esc(tok);
       }
     }
-    out += '</p>' + freehandSVGHTML(edition, episode, pi, false) + "</div>";
+    out += "</p>";
   });
   return out;
 }
@@ -978,53 +987,7 @@ function tapWordOrMark(word, edition, episode, pi, paraIdx, wIdx) {
 function setPenMode(mode) {
   penMode = mode;
   renderPractice();
-  setTimeout(refreshFreehandLayers, 0);
 }
-function freehandSVGHTML(edition, episode, passageIndex, cloze) {
-  var strokes = getFreehand(edition, episode, passageIndex, cloze);
-  var paths = strokes.map(function (points) { return '<path class="draw-stroke" d="' + points + '"></path>'; }).join("");
-  return '<svg class="draw-layer' + (penMode === "ul" ? " active" : "") + '" data-edition="' + esc(edition) + '" data-episode="' + episode + '" data-passage="' + passageIndex + '" data-cloze="' + (cloze ? "1" : "0") + '" viewBox="0 0 1000 1000" preserveAspectRatio="none">' + paths + '</svg>';
-}
-function refreshFreehandLayers() {
-  var layers = document.querySelectorAll(".draw-layer");
-  for (var i = 0; i < layers.length; i++) layers[i].classList.toggle("active", penMode === "ul");
-}
-var activeStroke = null;
-function freehandPoint(event, svg) {
-  var rect = svg.getBoundingClientRect();
-  var x = Math.max(0, Math.min(1000, (event.clientX - rect.left) / rect.width * 1000));
-  var y = Math.max(0, Math.min(1000, (event.clientY - rect.top) / rect.height * 1000));
-  return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
-}
-document.addEventListener("pointerdown", function (event) {
-  var svg = event.target.closest && event.target.closest(".draw-layer.active");
-  if (!svg || (event.pointerType === "mouse" && event.button !== 0)) return;
-  event.preventDefault();
-  svg.setPointerCapture(event.pointerId);
-  var p = freehandPoint(event, svg);
-  activeStroke = { svg: svg, edition: svg.dataset.edition, episode: +svg.dataset.episode, passage: +svg.dataset.passage, cloze: svg.dataset.cloze === "1", points: [p], path: document.createElementNS("http://www.w3.org/2000/svg", "path") };
-  activeStroke.path.setAttribute("class", "draw-stroke");
-  svg.appendChild(activeStroke.path);
-  activeStroke.path.setAttribute("d", "M" + p[0] + " " + p[1]);
-});
-document.addEventListener("pointermove", function (event) {
-  if (!activeStroke) return;
-  var p = freehandPoint(event, activeStroke.svg);
-  activeStroke.points.push(p);
-  activeStroke.path.setAttribute("d", activeStroke.points.map(function (xy, i) { return (i ? "L" : "M") + xy[0] + " " + xy[1]; }).join(" "));
-});
-function finishFreehand() {
-  if (!activeStroke) return;
-  var data = activeStroke;
-  activeStroke = null;
-  if (data.points.length > 1) {
-    var strokes = getFreehand(data.edition, data.episode, data.passage, data.cloze);
-    strokes.push(data.path.getAttribute("d"));
-    setFreehand(data.edition, data.episode, data.passage, strokes, data.cloze);
-  } else data.path.remove();
-}
-document.addEventListener("pointerup", finishFreehand);
-document.addEventListener("pointercancel", finishFreehand);
 function clearAllMarks(edition, episode) {
   setEpisodeMarks(edition, episode, {});
   rerenderKeepScroll();
@@ -1037,24 +1000,23 @@ function rerenderKeepScroll() {
 }
 function tapWord(word, edition, episode) {
   var hit = lookupLocal(word);
-  var html = wordCardHTML(word, hit);
+  var html = '<h2>' + esc(word) + "</h2>";
+  if (hit) {
+    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
+    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
+  } else {
+    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
+    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
+  }
   html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
   html += '<button class="btn" onclick="addReadingWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本期生词</button> ';
   html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
   openModal(html);
 }
-function wordCardHTML(word, hit) {
-  var html = '<h2>' + esc(word) + "</h2>";
-  if (hit) html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
-  else html += '<p class="muted">暂未收录该词条，可以发音或打开有道词典查询。</p><a class="btn ghost" target="_blank" rel="noopener" href="https://dict.youdao.com/result?word=' + encodeURIComponent(word) + '">去有道查词</a>';
-  html += '<button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button>';
-  return html;
-}
 function addReadingWordFromTap(edition, episode, word) {
-  var hit = lookupLocal(word);
-  var p = hit ? hit.pos : "";
-  var m = hit ? hit.meaning : "";
-  if (!p || !m) { window.open("https://dict.youdao.com/result?word=" + encodeURIComponent(word), "_blank", "noopener"); return; }
+  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
+  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
+  if (!p || !m) { alert("词性和中文都要填。"); return; }
   addReadingWord(edition, episode, word, p, m);
   closeModal();
   renderPractice();
@@ -1262,7 +1224,7 @@ function clozePassageHTML(text, edition, episode) {
   var out = "";
   parts.forEach(function (para, paraIdx) {
     if (!para.trim()) return;
-    out += '<div class="passage-wrap"><p class="passage">';
+    out += '<p class="passage">';
     var re = /\{\{(\d+)\}\}|[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s{}]+|\s+/g;
     var m;
     var wIdx = 0;
@@ -1292,7 +1254,7 @@ function clozePassageHTML(text, edition, episode) {
         out += esc(tok);
       }
     }
-    out += '</p>' + freehandSVGHTML(edition, episode, 0, true) + "</div>";
+    out += "</p>";
   });
   return out;
 }
@@ -1318,17 +1280,23 @@ function clearAllClozeMarks(edition, episode) {
 }
 function tapWordCloze(word, edition, episode) {
   var hit = lookupLocal(word);
-  var html = wordCardHTML(word, hit);
+  var html = '<h2>' + esc(word) + "</h2>";
+  if (hit) {
+    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
+    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
+  } else {
+    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
+    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
+  }
   html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
   html += '<button class="btn" onclick="addClozeWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本期生词</button> ';
   html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
   openModal(html);
 }
 function addClozeWordFromTap(edition, episode, word) {
-  var hit = lookupLocal(word);
-  var p = hit ? hit.pos : "";
-  var m = hit ? hit.meaning : "";
-  if (!p || !m) { window.open("https://dict.youdao.com/result?word=" + encodeURIComponent(word), "_blank", "noopener"); return; }
+  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
+  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
+  if (!p || !m) { alert("词性和中文都要填。"); return; }
   addClozeWord(edition, episode, word, p, m);
   closeModal();
   renderPractice();
@@ -1468,6 +1436,268 @@ function clozeWordsHomeHTML() {
   words.forEach(function (x) {
     html += '<div class="dict-row"><b>' + esc(x.word) + '</b> <span style="color:var(--accent)">' + esc(x.pos || "") + "</span> " + esc(x.meaning || "") + (x.mastered ? ' <span class="done-mark">已掌握</span>' : "");
     html += '<div><button class="btn ghost small" onclick="speakWordTwice(\'' + esc(x.word).replace(/'/g, "\\'") + '\')">读音</button><button class="btn ghost small" onclick="setCWordMastered(\'' + x.id + "'," + (!x.mastered) + ');renderPractice()">' + (x.mastered ? "取消已掌握" : "标为已掌握") + '</button><button class="btn danger small" onclick="deleteCWord(\'' + x.id + '\');renderPractice()">删除</button></div></div>';
+  });
+  html += "</div>";
+  return html;
+}
+</script>
+
+<script>
+/* ============ 长篇匹配 ============ */
+var M_VERSIONS = [
+  { id: "basic", name: "基础版" },
+  { id: "advanced", name: "进阶版" },
+  { id: "exam", name: "四级真题版" }
+];
+var curMVersion = "basic";
+var curMatchingEpisode = null; /* episode no */
+var mAnswers = {}; /* qIndex 0-9 -> 段落字母 */
+var mShowAnswers = false;
+var mPage = 1;
+var M_PAGE_SIZE = 10;
+
+function matchingData(version) {
+  if (version === "basic") return window.ENG_MATCHING_BASIC || [];
+  if (version === "advanced") return window.ENG_MATCHING_ADVANCED || [];
+  return window.ENG_MATCHING_REAL || [];
+}
+function matchingEpisode(version, no) {
+  var eps = matchingData(version);
+  for (var i = 0; i < eps.length; i++) { if (eps[i].no === no) return eps[i]; }
+  return null;
+}
+function matchingVersionName(id) {
+  for (var i = 0; i < M_VERSIONS.length; i++) { if (M_VERSIONS[i].id === id) return M_VERSIONS[i].name; }
+  return id;
+}
+
+function renderMatchingHome() {
+  var html = '<div class="chips">';
+  M_VERSIONS.forEach(function (v) {
+    html += '<button class="' + (v.id === curMVersion ? "active" : "") + '" onclick="curMVersion=\'' + v.id + '\';curMatchingEpisode=null;mShowAnswers=false;mAnswers={};mPage=1;renderPractice()">' + esc(v.name) + "</button>";
+  });
+  html += "</div>";
+  var eps = matchingData(curMVersion);
+  var intro = curMVersion === "exam"
+    ? "往年四级长篇匹配真题，每篇标明年份和套数，原文、答案和解析逐篇核对过出处。"
+    : "按四级长篇匹配标准自编的模拟题，明确标注为自编模拟题，不是真题。每篇 1 篇长文章 + 10 道匹配题。";
+  html += '<div class="card"><h2>' + esc(matchingVersionName(curMVersion)) + " · 共 " + eps.length + ' 篇</h2><p class="muted">' + esc(intro) + "</p></div>";
+  var total = eps.length;
+  var pages = Math.max(1, Math.ceil(total / M_PAGE_SIZE));
+  if (mPage > pages) mPage = pages;
+  var start = (mPage - 1) * M_PAGE_SIZE;
+  var pageItems = eps.slice(start, start + M_PAGE_SIZE);
+  html += '<div class="card"><div class="ep-list">';
+  pageItems.forEach(function (ep) {
+    var label = "第" + ep.no + "篇 · " + ep.title + (ep.source ? "（" + ep.source + "）" : "");
+    html += '<div class="ep-item" onclick="curMatchingEpisode=' + ep.no + ';mShowAnswers=false;mAnswers={};renderPractice()"><span>' + esc(label) + '</span><span class="muted">10 题 ›</span></div>';
+  });
+  html += "</div>";
+  if (pages > 1) {
+    html += '<div style="margin-top:10px"><button class="btn ghost small" onclick="mPage=Math.max(1,mPage-1);renderPractice()" ' + (mPage <= 1 ? "disabled" : "") + ">上一页</button> ";
+    html += '<span class="muted">第 ' + mPage + " / " + pages + " 页</span> ";
+    html += '<button class="btn ghost small" onclick="mPage=Math.min(' + pages + ',mPage+1);renderPractice()" ' + (mPage >= pages ? "disabled" : "") + ">下一页</button></div>";
+  }
+  html += "</div>";
+  html += matchingWordsHomeHTML();
+  return html;
+}
+
+/* 长篇匹配文章渲染：每段标段号，单词是正常文字、只留虚线下划线（复用 tap-word 样式，绝不包方框）；标记笔模式下点词改为涂标记 */
+function matchingPassageHTML(ep, edition, episode) {
+  var marks = getMatchingEpisodeMarks(edition, episode);
+  var out = "";
+  (ep.paragraphs || []).forEach(function (p, pi) {
+    out += '<h3>' + esc(p.label) + " 段</h3>";
+    var pmarks = marks[String(pi)] || {};
+    var parts = String(p.text || "").split("\n");
+    parts.forEach(function (para, paraIdx) {
+      if (!para.trim()) return;
+      out += '<p class="passage">';
+      var re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s]+|\s+/g;
+      var m;
+      var wIdx = 0;
+      while ((m = re.exec(para)) !== null) {
+        var tok = m[0];
+        if (/^[A-Za-z]/.test(tok)) {
+          var key = paraIdx + ":" + wIdx;
+          var mk = pmarks[key] || "";
+          var cls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
+          out += '<span class="' + cls + '" onclick="tapWordOrMarkMatching(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
+          wIdx++;
+        } else {
+          out += esc(tok);
+        }
+      }
+      out += "</p>";
+    });
+  });
+  return out;
+}
+function tapWordOrMarkMatching(word, edition, episode, pi, paraIdx, wIdx) {
+  if (penMode === "lookup") { tapWordMatching(word, edition, episode); return; }
+  var marks = getMatchingEpisodeMarks(edition, episode);
+  var pkey = String(pi);
+  if (!marks[pkey]) marks[pkey] = {};
+  var key = paraIdx + ":" + wIdx;
+  if (penMode === "eraser") {
+    delete marks[pkey][key];
+  } else {
+    var kind = penMode === "hl" ? "hl" : "ul";
+    if (marks[pkey][key] === kind) delete marks[pkey][key];
+    else marks[pkey][key] = kind;
+  }
+  if (Object.keys(marks[pkey]).length === 0) delete marks[pkey];
+  setMatchingEpisodeMarks(edition, episode, marks);
+  rerenderKeepScroll();
+}
+function clearAllMatchingMarks(edition, episode) {
+  setMatchingEpisodeMarks(edition, episode, {});
+  rerenderKeepScroll();
+}
+function tapWordMatching(word, edition, episode) {
+  var hit = lookupLocal(word);
+  var html = '<h2>' + esc(word) + "</h2>";
+  if (hit) {
+    html += '<p><span class="muted">' + esc(hit.phon || "") + '</span></p><p><b>' + esc(hit.pos || "") + '</b> ' + esc(hit.meaning || "") + "</p>";
+    html += '<input type="hidden" id="tw-pos" value="' + esc(hit.pos || "") + '"><input type="hidden" id="tw-mean" value="' + esc(hit.meaning || "") + '">';
+  } else {
+    html += '<p class="muted">本地词典里没有这个词，请自己填词性和中文：</p>';
+    html += '<label>词性</label><input type="text" id="tw-pos" placeholder="如 n. / v. / adj."><label>中文意思</label><input type="text" id="tw-mean" placeholder="中文意思">';
+  }
+  html += '<div style="margin-top:10px"><button class="btn" onclick="speakWordTwice(\'' + esc(word).replace(/'/g, "\\'") + '\')">读音</button> ';
+  html += '<button class="btn" onclick="addMatchingWordFromTap(\'' + edition + "'," + episode + ",'" + esc(word).replace(/'/g, "\\'") + '\')">记入本篇生词</button> ';
+  html += '<button class="btn ghost" onclick="closeModal()">关闭</button></div>';
+  openModal(html);
+}
+function addMatchingWordFromTap(edition, episode, word) {
+  var p = $("tw-pos") ? $("tw-pos").value.trim() : "";
+  var m = $("tw-mean") ? $("tw-mean").value.trim() : "";
+  if (!p || !m) { alert("词性和中文都要填。"); return; }
+  addMatchingWord(edition, episode, word, p, m);
+  closeModal();
+  renderPractice();
+}
+
+function renderMatchingEpisode() {
+  var ep = matchingEpisode(curMVersion, curMatchingEpisode);
+  if (!ep) return renderMatchingHome();
+  var vname = matchingVersionName(curMVersion);
+  var html = '<button class="btn ghost" onclick="curMatchingEpisode=null;mShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
+  var markCount = countMatchingMarks(curMVersion, ep.no);
+  html += '<div class="pen-toolbar"><span class="lbl">标记笔：</span>';
+  html += '<button class="' + (penMode === "lookup" ? "active" : "") + '" onclick="setPenMode(\'lookup\')">点词查词</button>';
+  html += '<button class="' + (penMode === "hl" ? "active" : "") + '" onclick="setPenMode(\'hl\')">荧光笔</button>';
+  html += '<button class="' + (penMode === "ul" ? "active" : "") + '" onclick="setPenMode(\'ul\')">下划线笔</button>';
+  html += '<button class="' + (penMode === "eraser" ? "active" : "") + '" onclick="setPenMode(\'eraser\')">橡皮</button>';
+  html += '<button onclick="clearAllMatchingMarks(\'' + curMVersion + "'," + ep.no + ')" ' + (markCount ? "" : "disabled") + ">清除全部标记（" + markCount + "）</button>";
+  html += "</div>";
+  html += '<div class="card"><h2>' + esc(vname) + " 第" + ep.no + "篇" + (ep.source ? " · " + esc(ep.source) : "") + "</h2>";
+  html += "<h3>" + esc(ep.title) + "</h3>";
+  var lastLabel = (ep.paragraphs || []).length ? ep.paragraphs[ep.paragraphs.length - 1].label : "L";
+  html += '<p class="muted">先读文章，再给每句话选一段：点每句后面的下拉框选段号（A–' + esc(lastLabel) + '）。答完点自查看解析。</p>';
+  html += matchingPassageHTML(ep, curMVersion, ep.no);
+  html += "<h3>匹配题（第 36–45 句）</h3>";
+  var labels = (ep.paragraphs || []).map(function (p) { return p.label; });
+  (ep.questions || []).forEach(function (q, qi) {
+    html += '<div class="dict-row"><div class="q"><b>' + (q.no || (36 + qi)) + ". </b>" + esc(q.statement) + "</div>";
+    html += '<select onchange="mAnswers[' + qi + ']=this.value;rerenderKeepScroll()" ' + (mShowAnswers ? "disabled" : "") + ">";
+    html += '<option value=""' + (!mAnswers[String(qi)] ? " selected" : "") + ">请选择段号</option>";
+    labels.forEach(function (lb) {
+      html += '<option value="' + esc(lb) + '"' + (mAnswers[String(qi)] === lb ? " selected" : "") + ">" + esc(lb) + " 段</option>";
+    });
+    html += "</select>";
+    if (mShowAnswers) {
+      var mine = mAnswers[String(qi)] || "未作答";
+      html += mine === q.answer ? '<p class="done-mark">你答对了</p>' : '<p style="color:var(--red)">你答错了（你选 ' + esc(mine) + "，正确答案 " + esc(q.answer) + " 段）</p>";
+    }
+    html += "</div>";
+  });
+  html += '<div style="margin-top:12px"><button class="btn" onclick="mShowAnswers=true;renderPractice()" ' + (mShowAnswers ? "disabled" : "") + '>自查</button></div>';
+  if (mShowAnswers) {
+    var right = 0, total = 0;
+    html += '<div class="answer-box open"><h3>本篇答案与解析</h3>';
+    (ep.questions || []).forEach(function (q, qi) {
+      var mine = mAnswers[String(qi)] || "未作答";
+      total++;
+      if (mine === q.answer) right++;
+      html += "<p><b>第" + (q.no || (36 + qi)) + "句：正确答案为 " + esc(q.answer) + " 段</b></p><p>" + esc(q.analysis || "") + "</p>";
+      if (mine !== q.answer) {
+        html += '<button class="btn ghost small" onclick="addMistakeFromMatching(\'' + curMVersion + "'," + ep.no + "," + qi + ')">加入错题库</button>';
+      }
+    });
+    html += '<p class="muted">本篇答对 ' + right + " / " + total + " 题</p></div>";
+  }
+  html += "</div>";
+  html += matchingWordsEpisodeHTML(curMVersion, ep.no);
+  return html;
+}
+function addMistakeFromMatching(version, epNo, qi) {
+  var ep = matchingEpisode(version, epNo);
+  if (!ep) return;
+  var q = ep.questions[qi];
+  var mine = mAnswers[String(qi)] || "未作答";
+  var labels = (ep.paragraphs || []).map(function (p) { return p.label; }).join("、");
+  openMistakeForm({
+    module: "matching",
+    title: "长篇匹配 第" + epNo + "篇 第" + (q.no || (36 + qi)) + "句",
+    question: "《" + ep.title + "》第" + (q.no || (36 + qi)) + "句\n" + q.statement + "\n段落：" + labels,
+    myAnswer: mine + " 段",
+    correctAnswer: q.answer + " 段"
+  });
+}
+function matchingWordsEpisodeHTML(edition, episode) {
+  var words = getMatchingWords().filter(function (x) { return x.edition === edition && x.episode === episode; });
+  var html = '<div class="card"><h2>本篇生词汇总</h2><p class="muted">点文章里的单词可以直接记入，也可以手动输入英文单词。</p>';
+  html += '<input type="text" id="mw-input" placeholder="输入英文单词">';
+  html += '<input type="text" id="mw-pos" placeholder="词性"><input type="text" id="mw-mean" placeholder="中文意思">';
+  html += '<button class="btn small" onclick="mwAutoFill()">查词性+中文</button> ';
+  html += '<button class="btn small" onclick="mwAdd(\'' + edition + "'," + episode + ')">记入本篇生词</button>';
+  if (!words.length) html += '<p class="muted">本篇还没有记生词。</p>';
+  words.forEach(function (x) {
+    html += '<div class="dict-row"><b>' + esc(x.word) + '</b> <span style="color:var(--accent)">' + esc(x.pos || "") + "</span> " + esc(x.meaning || "") + (x.mastered ? ' <span class="done-mark">已掌握</span>' : "");
+    html += '<div><button class="btn ghost small" onclick="speakWordTwice(\'' + esc(x.word).replace(/'/g, "\\'") + '\')">读音</button><button class="btn ghost small" onclick="setMWordMastered(\'' + x.id + "'," + (!x.mastered) + ');renderPractice()">' + (x.mastered ? "取消已掌握" : "标为已掌握") + '</button><button class="btn danger small" onclick="deleteMWord(\'' + x.id + '\');renderPractice()">删除</button></div></div>';
+  });
+  html += "</div>";
+  return html;
+}
+function mwAutoFill() {
+  var w = $("mw-input").value.trim();
+  if (!w) { alert("先输入英文单词。"); return; }
+  var hit = lookupLocal(w);
+  if (hit) { $("mw-pos").value = hit.pos || ""; $("mw-mean").value = hit.meaning || ""; }
+  else alert("本地词典里没有这个词，请自己填词性和中文。");
+}
+function mwAdd(edition, episode) {
+  var w = $("mw-input").value.trim();
+  var p = $("mw-pos").value.trim();
+  var m = $("mw-mean").value.trim();
+  if (!w) { alert("先输入英文单词。"); return; }
+  if (!p || !m) { var hit = lookupLocal(w); if (hit) { p = p || hit.pos || ""; m = m || hit.meaning || ""; } }
+  if (!p || !m) { alert("词性和中文都要填（可以点“查词性+中文”自动填，查不到就自己填）。"); return; }
+  addMatchingWord(edition, episode, w, p, m);
+  renderPractice();
+}
+function matchingWordsHomeHTML() {
+  var all = getMatchingWords();
+  var html = '<div class="card"><h2>生词汇总</h2><p class="muted">选一篇，看那篇记下的全部生词。</p>';
+  html += '<select id="mw-home-sel" onchange="window.__mwHomeEp=this.value;renderPractice()">';
+  M_VERSIONS.forEach(function (v) {
+    var eps = matchingData(v.id);
+    eps.forEach(function (ep) {
+      var sel = (window.__mwHomeEp === v.id + "-" + ep.no) ? " selected" : "";
+      html += '<option value="' + v.id + "-" + ep.no + '"' + sel + ">" + esc(v.name) + " 第" + ep.no + "篇</option>";
+    });
+  });
+  html += "</select>";
+  var selVal = window.__mwHomeEp || (curMVersion + "-1");
+  var parts = selVal.split("-");
+  var ed = parts[0], epNo = +parts[1];
+  var words = all.filter(function (x) { return x.edition === ed && x.episode === epNo; });
+  if (!words.length) html += "<p class=\"muted\">这篇还没有记生词。</p>";
+  words.forEach(function (x) {
+    html += '<div class="dict-row"><b>' + esc(x.word) + '</b> <span style="color:var(--accent)">' + esc(x.pos || "") + "</span> " + esc(x.meaning || "") + (x.mastered ? ' <span class="done-mark">已掌握</span>' : "");
+    html += '<div><button class="btn ghost small" onclick="speakWordTwice(\'' + esc(x.word).replace(/'/g, "\\'") + '\')">读音</button><button class="btn ghost small" onclick="setMWordMastered(\'' + x.id + "'," + (!x.mastered) + ');renderPractice()">' + (x.mastered ? "取消已掌握" : "标为已掌握") + '</button><button class="btn danger small" onclick="deleteMWord(\'' + x.id + '\');renderPractice()">删除</button></div></div>';
   });
   html += "</div>";
   return html;
@@ -1618,6 +1848,11 @@ function renderPractice() {
   }
   if (curPracticeModule === "cloze") {
     html += curClozeEpisode ? renderClozeEpisode() : renderClozeHome();
+    $("view-practice").innerHTML = html;
+    return;
+  }
+  if (curPracticeModule === "matching") {
+    html += curMatchingEpisode ? renderMatchingEpisode() : renderMatchingHome();
     $("view-practice").innerHTML = html;
     return;
   }
@@ -1784,7 +2019,7 @@ function dataReady() {
 window.addEventListener("load", function () {
   updateMisCount();
   if (!dataReady()) {
-    $("view-learn").innerHTML = '<div class="card"><h2>数据文件未加载完全</h2><p>请确认 eng-words.js、eng-listening-*.js、eng-reading-*.js、eng-lessons.js 与 english.html 在同一目录下。</p></div>';
+    $("view-learn").innerHTML = '<div class="card"><h2>数据文件未加载完全</h2><p>请确认 eng-words.js、eng-listening-*.js、eng-reading-*.js、eng-cloze-*.js、eng-matching-*.js、eng-lessons.js 与 english.html 在同一目录下。</p></div>';
   }
   renderLearn();
 });
