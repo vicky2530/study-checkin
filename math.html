@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>高等数学学习</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="math-lessons.js"></script>
+<style>
+  :root {
+    --primary: #3f6fb5; --primary-dark: #2f558c; --primary-light: #e8effa;
+    --accent: #5b7fa6; --bg: #f4f6fa; --card: #ffffff; --border: #dfe5f0;
+    --text: #2e3245; --muted: #6b7086; --green: #3f8f6b; --amber: #b07f2e; --red: #b05252;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+  header { background: linear-gradient(135deg, #3f6fb5, #5b7fa6); color: #fff; padding: 20px 16px; text-align: center; }
+  header h1 { font-size: 22px; letter-spacing: 2px; }
+  header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+  nav.tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; overflow-x: auto; }
+  nav.tabs button { flex: 1; white-space: nowrap; padding: 13px 10px; border: none; background: none; font-size: 15px; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; }
+  nav.tabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: bold; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px 12px 60px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 18px; color: var(--primary-dark); margin-bottom: 6px; }
+  .card h3 { font-size: 16px; margin: 12px 0 6px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 20px; margin-right: 6px; }
+  .badge.basic { background: #e3f2e9; color: var(--green); }
+  .badge.mid { background: #fbf1dd; color: var(--amber); }
+  .badge.hard { background: #fbe7e7; color: var(--red); }
+  .badge.ch { background: var(--primary-light); color: var(--primary-dark); }
+  .btn { display: inline-block; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--primary); background: var(--primary); color: #fff; font-size: 14px; cursor: pointer; margin: 4px 6px 4px 0; }
+  .btn:hover { background: var(--primary-dark); }
+  .btn.ghost { background: #fff; color: var(--primary); }
+  .btn.ghost:hover { background: var(--primary-light); }
+  .btn.danger { background: #fff; color: var(--red); border-color: var(--red); }
+  .btn.small { padding: 5px 10px; font-size: 13px; }
+  .btn.on { background: var(--green); border-color: var(--green); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  select, input[type=text], textarea { font-size: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; width: 100%; margin: 4px 0; font-family: inherit; }
+  textarea { min-height: 70px; resize: vertical; }
+  .ans { background: #f2f7f4; border-left: 3px solid var(--green); padding: 10px 12px; border-radius: 0 8px 8px 0; margin: 8px 0; }
+  .ans.hidden { display: none; }
+  .pit { background: #fdf6ec; border-left: 3px solid var(--amber); padding: 10px 12px; border-radius: 0 8px 8px 0; margin: 8px 0; }
+  .formula { background: #f4f6fb; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 8px 0; overflow-x: auto; }
+  table.formula-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.formula-table td, table.formula-table th { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+  table.formula-table th { background: var(--primary-light); }
+  .mindmap { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #fbfcfe; }
+  .mindmap .mm-ch { font-weight: bold; color: var(--primary-dark); margin: 6px 0; }
+  .mindmap .mm-sec { margin: 4px 0 4px 12px; font-weight: bold; font-size: 14px; }
+  .mindmap .mm-pt { margin: 2px 0 2px 26px; }
+  .mindmap button { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 14px; text-align: left; padding: 2px 0; }
+  .mindmap button:hover { text-decoration: underline; }
+  .point-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 10px 0; }
+  .point-card.learned { border-color: var(--green); }
+  .point-card:target, .point-card.flash { background: #fff8e6; }
+  .progress-bar { height: 10px; background: #e8ebf2; border-radius: 5px; overflow: hidden; margin: 4px 0; }
+  .progress-bar > div { height: 100%; background: var(--primary); }
+  .mistake-top { background: #fdf3f3; border: 1px solid #f0d5d5; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+  .mistake-bottom { background: #f2f7f4; border: 1px solid #d5e5dc; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+  .reason-btn.on { background: var(--amber); border-color: var(--amber); color: #fff; }
+  .video-box { border: 2px dashed var(--border); border-radius: 8px; padding: 20px; text-align: center; color: var(--muted); margin: 10px 0; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>高等数学学习</h1>
+  <p>广州新华学院高等数学教研室主编 · 北京大学出版社 · 共 10 章</p>
+  <p class="muted" style="color:#dfe8f5">练习题按经典题型自编，非课本原题；难度对标课后习题。</p>
+</header>
+<nav class="tabs" id="tabs">
+  <button data-tab="home" class="active" onclick="showTab('home')">首页</button>
+  <button data-tab="chapters" onclick="showTab('chapters')">章节</button>
+  <button data-tab="practice" onclick="showTab('practice')">练习</button>
+  <button data-tab="formulas" onclick="showTab('formulas')">公式速查</button>
+  <button data-tab="mistakes" onclick="showTab('mistakes')">错题库 <span id="mistakeCount"></span></button>
+  <button data-tab="progress" onclick="showTab('progress')">进度统计</button>
+</nav>
+<main id="main"></main>
+<script>
+"use strict";
+/* ============ 数据 ============ */
+var CHAPTERS = (typeof window !== "undefined" && window.MATH_CHAPTERS) ? window.MATH_CHAPTERS : [];
+function allPoints() { var out = []; CHAPTERS.forEach(function (c) { c.sections.forEach(function (s) { s.points.forEach(function (p) { out.push({ ch: c, sec: s, pt: p }); }); }); }); return out; }
+function allExercises() { var out = []; allPoints().forEach(function (x) { x.pt.exercises.forEach(function (e) { out.push({ ch: x.ch, sec: x.sec, pt: x.pt, ex: e }); }); }); return out; }
+function findExercise(qid) { var r = null; allExercises().forEach(function (x) { if (x.ex.id === qid) r = x; }); return r; }
+function findPoint(pid) { var r = null; allPoints().forEach(function (x) { if (x.pt.id === pid) r = x; }); return r; }
+/* ============ 存储（全部 math- 前缀） ============ */
+function storeGet(key, def) { try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch (e) { return def; } }
+function storeSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+function getProgress() { return storeGet("math-progress", {}); }
+function getMistakes() { return storeGet("math-mistakes", []); }
+function getDaily() { return storeGet("math-daily", {}); }
+function getAttempts() { return storeGet("math-attempts", {}); }
+function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function renderMath() { try { if (typeof renderMathInElement === "function") { renderMathInElement(document.getElementById("main"), { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }] }); } } catch (e) {} }
+function levelBadge(l) { return l === "基础" ? '<span class="badge basic">基础</span>' : l === "进阶" ? '<span class="badge mid">进阶</span>' : '<span class="badge hard">难题</span>'; }
+/* ============ 页签 ============ */
+var curTab = "home", curChapter = 1, curPracticeCh = 0, curPracticeLevel = "全部";
+function showTab(t) {
+  curTab = t;
+  var btns = document.querySelectorAll("#tabs button");
+  for (var i = 0; i < btns.length; i++) btns[i].classList.toggle("active", btns[i].getAttribute("data-tab") === t);
+  if (t === "home") renderHome();
+  else if (t === "chapters") renderChapters();
+  else if (t === "practice") renderPractice();
+  else if (t === "formulas") renderFormulas();
+  else if (t === "mistakes") renderMistakes();
+  else if (t === "progress") renderProgress();
+  updateMistakeCount();
+}
+function updateMistakeCount() { var el = document.getElementById("mistakeCount"); if (el) { var n = getMistakes().filter(function (m) { return !m.mastered; }).length; el.textContent = n ? "(" + n + ")" : ""; } }
+function toggleAns(id) { var el = document.getElementById(id); if (el) el.classList.toggle("hidden"); }
+/* ============ 首页：每日一题 + 总进度 ============ */
+function dailyExercise() {
+  var list = allExercises(); if (!list.length) return null;
+  var d = new Date(); var day = Math.floor(d.getTime() / 86400000);
+  return list[((day % list.length) + list.length) % list.length];
+}
+function renderHome() {
+  var pts = allPoints(), prog = getProgress();
+  var learned = pts.filter(function (x) { return prog[x.pt.id]; }).length;
+  var d = dailyExercise();
+  var today = new Date().toISOString().slice(0, 10);
+  var daily = getDaily();
+  var html = '<div class="card"><h2>今日学习</h2>'
+    + '<p>全书共 ' + CHAPTERS.length + ' 章 · ' + pts.length + ' 个知识点 · ' + allExercises().length + ' 道练习题</p>'
+    + '<p>已学完 ' + learned + ' / ' + pts.length + ' 个知识点</p>'
+    + '<div class="progress-bar"><div style="width:' + (pts.length ? Math.round(learned / pts.length * 100) : 0) + '%"></div></div></div>';
+  if (d) {
+    html += '<div class="card"><h2>每日一题</h2>'
+      + '<p class="muted">' + esc(d.ch.title) + ' · ' + esc(d.sec.title) + ' · ' + esc(d.pt.title) + ' ' + levelBadge(d.ex.level) + '</p>'
+      + '<p>' + esc(d.ex.q) + '</p>'
+      + '<button class="btn" onclick="toggleAns(\'daily-ans\')">自查</button>'
+      + '<div id="daily-ans" class="ans hidden"><p><b>答案：</b>' + esc(d.ex.a) + '</p><p><b>解析：</b>' + esc(d.ex.s) + '</p></div>'
+      + (daily[today] ? '<button class="btn" disabled>✓ 今天已完成</button>'
+        : '<button class="btn ghost" onclick="setDailyDone()">打卡：今天已完成</button>')
+      + '</div>';
+  }
+  html += '<div class="card"><h2>快速入口</h2><div class="row">'
+    + '<button class="btn" onclick="showTab(\'chapters\')">去看章节</button>'
+    + '<button class="btn ghost" onclick="showTab(\'practice\')">去做练习</button>'
+    + '<button class="btn ghost" onclick="showTab(\'mistakes\')">错题库</button></div></div>';
+  document.getElementById("main").innerHTML = html; renderMath();
+}
+function setDailyDone() { var today = new Date().toISOString().slice(0, 10); var daily = getDaily(); daily[today] = true; storeSet("math-daily", daily); renderHome(); }
+/* ============ 章节 ============ */
+function renderChapters() {
+  var html = '<div class="card"><h2>章节</h2><div class="row"><select id="chSel" onchange="curChapter=+this.value;renderChapter()">';
+  CHAPTERS.forEach(function (c) { html += '<option value="' + c.num + '"' + (c.num === curChapter ? ' selected' : '') + '>第' + c.num + '章 ' + esc(c.title) + '</option>'; });
+  html += '</select></div></div><div id="chBody"></div>';
+  document.getElementById("main").innerHTML = html; renderChapter();
+}
+function renderChapter() {
+  var c = CHAPTERS[curChapter - 1]; if (!c) return;
+  var prog = getProgress();
+  var pts = []; c.sections.forEach(function (s) { s.points.forEach(function (p) { pts.push(p); }); });
+  var learned = pts.filter(function (p) { return prog[p.id]; }).length;
+  var html = '<div class="card"><h2>第' + c.num + '章 ' + esc(c.title) + '</h2><p class="muted">' + esc(c.intro || "") + '</p>'
+    + '<p>已学完 ' + learned + ' / ' + pts.length + ' 个知识点</p>'
+    + '<div class="progress-bar"><div style="width:' + (pts.length ? Math.round(learned / pts.length * 100) : 0) + '%"></div></div></div>';
+  // 思维导图（可点跳转）
+  html += '<div class="card"><h2>思维导图</h2><div class="mindmap"><div class="mm-ch">第' + c.num + '章 ' + esc(c.title) + '</div>';
+  c.sections.forEach(function (s) {
+    html += '<div class="mm-sec">§' + esc(s.id) + ' ' + esc(s.title) + '</div>';
+    s.points.forEach(function (p) { html += '<div class="mm-pt"><button onclick="jumpPoint(\'' + p.id + '\')">' + esc(p.title) + '</button></div>'; });
+  });
+  html += '</div><p class="note">点导图里的知识点可以直接跳到对应讲解。</p></div>';
+  // 视频区（先留位置）
+  html += '<div class="card"><h2>视频区</h2><div class="video-box">视频上传功能以后再做（需要服务器存储），这里先留位置。<br><button class="btn ghost" disabled>上传视频（待开放）</button></div></div>';
+  // 各节知识点
+  c.sections.forEach(function (s) {
+    html += '<div class="card"><h2>§' + esc(s.id) + ' ' + esc(s.title) + '</h2>';
+    s.points.forEach(function (p) { html += pointHTML(p, prog); });
+    html += '</div>';
+  });
+  // 本章公式小结
+  html += '<div class="card"><h2>本章公式小结</h2>' + formulaTableHTML(c.formulas || []) + '</div>';
+  var body = document.getElementById("chBody"); if (body) { body.innerHTML = html; renderMath(); }
+}
+function pointHTML(p, prog) {
+  var learned = !!(prog && prog[p.id]);
+  var html = '<div class="point-card' + (learned ? ' learned' : '') + '" id="point-' + p.id + '">'
+    + '<h3>' + esc(p.title) + ' ' + (learned ? '<span class="badge basic">✓已学完</span>' : '') + '</h3>'
+    + '<p class="muted">' + esc(p.intro || "") + '</p>';
+  (p.detail || []).forEach(function (d) { html += '<p>' + esc(d) + '</p>'; });
+  if (p.formula) html += '<div class="formula">' + esc(p.formula) + '</div>';
+  if (p.pitfalls && p.pitfalls.length) {
+    html += '<div class="pit"><b>易错点：</b><ul>' + p.pitfalls.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join("") + '</ul></div>';
+  }
+  if (p.example) {
+    html += '<p><b>例题：</b>' + esc(p.example.q) + '</p>'
+      + '<button class="btn small" onclick="toggleAns(\'ex-' + p.id + '\')">看答案</button>'
+      + '<div id="ex-' + p.id + '" class="ans hidden"><p><b>答案：</b>' + esc(p.example.a) + '</p><p><b>解析：</b>' + esc(p.example.s) + '</p></div>';
+  }
+  (p.exercises || []).forEach(function (e) { html += exerciseHTML(e); });
+  html += '<button class="btn small ' + (learned ? 'on' : 'ghost') + '" onclick="toggleLearned(\'' + p.id + '\')">' + (learned ? '✓ 已学完' : '标记学完') + '</button>';
+  html += '</div>';
+  return html;
+}
+function exerciseHTML(e) {
+  return '<div class="card" style="margin:10px 0"><p>' + levelBadge(e.level) + esc(e.q) + '</p>'
+    + '<button class="btn small" onclick="toggleAns(\'a-' + e.id + '\');recordAttempt(\'' + e.id + '\')">自查</button>'
+    + '<button class="btn small ghost" onclick="addMistake(\'' + e.id + '\')">加入错题库</button>'
+    + '<div id="a-' + e.id + '" class="ans hidden"><p><b>答案：</b>' + esc(e.a) + '</p><p><b>解析：</b>' + esc(e.s) + '</p></div></div>';
+}
+function toggleLearned(pid) { var prog = getProgress(); if (prog[pid]) delete prog[pid]; else prog[pid] = true; storeSet("math-progress", prog); if (curTab === "chapters") renderChapter(); else if (curTab === "home") renderHome(); }
+function jumpPoint(pid) { var el = document.getElementById("point-" + pid); if (el) { el.scrollIntoView(); el.classList.add("flash"); setTimeout(function () { el.classList.remove("flash"); }, 1500); } }
+function recordAttempt(qid) { var a = getAttempts(); a[qid] = new Date().toISOString().slice(0, 10); storeSet("math-attempts", a); }
+function formulaTableHTML(list) {
+  if (!list.length) return '<p class="muted">本章暂无公式小结。</p>';
+  var html = '<table class="formula-table"><tr><th style="width:35%">公式</th><th>表达式</th></tr>';
+  list.forEach(function (f) { html += '<tr><td>' + esc(f.name) + '</td><td>' + esc(f.tex) + '</td></tr>'; });
+  return html + '</table>';
+}
+/* ============ 练习 ============ */
+function renderPractice() {
+  var html = '<div class="card"><h2>练习题</h2><div class="row"><select id="prCh" onchange="curPracticeCh=+this.value;renderPracticeList()"><option value="0">全部章节</option>';
+  CHAPTERS.forEach(function (c) { html += '<option value="' + c.num + '"' + (c.num === curPracticeCh ? ' selected' : '') + '>第' + c.num + '章 ' + esc(c.title) + '</option>'; });
+  html += '</select><select id="prLv" onchange="curPracticeLevel=this.value;renderPracticeList()">'
+    + ['全部', '基础', '进阶', '难题'].map(function (l) { return '<option' + (l === curPracticeLevel ? ' selected' : '') + '>' + l + '</option>'; }).join("")
+    + '</select></div><p class="note">难题为跨知识点综合题，放在最后练。</p></div><div id="prList"></div>';
+  document.getElementById("main").innerHTML = html; renderPracticeList();
+}
+function renderPracticeList() {
+  var list = allExercises().filter(function (x) {
+    return (curPracticeCh === 0 || x.ch.num === curPracticeCh) && (curPracticeLevel === "全部" || x.ex.level === curPracticeLevel);
+  });
+  var order = { "基础": 0, "进阶": 1, "难题": 2 };
+  list.sort(function (a, b) { return (order[a.ex.level] - order[b.ex.level]) || (a.ch.num - b.ch.num); });
+  var html = '<p class="muted">共 ' + list.length + ' 道题</p>';
+  list.forEach(function (x) {
+    html += '<div class="card"><p><span class="badge ch">第' + x.ch.num + '章</span>' + levelBadge(x.ex.level) + esc(x.ex.q) + '</p>'
+      + '<p class="muted">' + esc(x.pt.title) + '</p>' + exerciseHTML(x.ex) + '</div>';
+  });
+  var el = document.getElementById("prList"); if (el) { el.innerHTML = html; renderMath(); }
+}
+/* ============ 公式速查 ============ */
+function renderFormulas() {
+  var html = '<div class="card"><h2>公式速查表</h2><input type="text" id="fSearch" placeholder="输入公式名搜索，例如：洛必达" oninput="renderFormulaList()"></div><div id="fList"></div>';
+  document.getElementById("main").innerHTML = html; renderFormulaList();
+}
+function renderFormulaList() {
+  var q = ""; var inp = document.getElementById("fSearch"); if (inp) q = inp.value.trim();
+  var html = "";
+  CHAPTERS.forEach(function (c) {
+    var list = (c.formulas || []).filter(function (f) { return !q || f.name.indexOf(q) !== -1 || f.tex.indexOf(q) !== -1; });
+    if (!list.length) return;
+    html += '<div class="card"><h2>第' + c.num + '章 ' + esc(c.title) + '</h2>' + formulaTableHTML(list) + '</div>';
+  });
+  if (!html) html = '<div class="card"><p class="muted">没有找到相关公式。</p></div>';
+  var el = document.getElementById("fList"); if (el) { el.innerHTML = html; renderMath(); }
+}
+/* ============ 错题库 ============ */
+var REASONS = ["公式记错", "计算失误", "概念没理解"];
+function addMistake(qid) {
+  var x = findExercise(qid); if (!x) return;
+  var list = getMistakes();
+  if (list.some(function (m) { return m.qid === qid; })) { alert("这道题已在错题库里。"); return; }
+  list.unshift({ id: "m-" + Date.now(), qid: qid, ch: x.ch.num, q: x.ex.q, answer: x.ex.a, explain: x.ex.s, myAnswer: "", reasons: [], note: "", redo: "", mastered: false, createdAt: new Date().toISOString().slice(0, 10) });
+  storeSet("math-mistakes", list); updateMistakeCount();
+  var btns = document.querySelectorAll("button"); // 提示已加入
+  alert("已加入错题库。");
+}
+function renderMistakes() {
+  var list = getMistakes();
+  var html = '<div class="card"><h2>错题库</h2><p class="muted">共 ' + list.length + ' 道错题，其中 ' + list.filter(function (m) { return !m.mastered; }).length + ' 道未掌握。错题每周检错一次，连续 2 周，之后隔一个月再检错一次；检错时再答错则重新开始两周周期。</p></div>';
+  if (!list.length) html += '<div class="card"><p class="muted">错题库还是空的。做练习时点“加入错题库”就能把错题记进来。</p></div>';
+  list.forEach(function (m) {
+    html += '<div class="card"><p><span class="badge ch">第' + m.ch + '章</span>' + esc(m.q) + ' <span class="muted">' + esc(m.createdAt) + '</span></p>'
+      + '<div class="mistake-top"><b>我的错答：</b><textarea id="my-' + m.id + '" onchange="updateMistakeField(\'' + m.id + '\',\'myAnswer\',this.value)" placeholder="写下你当时错的答案/做法">' + esc(m.myAnswer || "") + '</textarea>'
+      + '<p><b>错因（可多选）：</b></p><div class="row">'
+      + REASONS.map(function (r) { return '<button class="btn small reason-btn' + (m.reasons.indexOf(r) !== -1 ? ' on' : '') + '" onclick="toggleReason(\'' + m.id + '\',\'' + r + '\')">' + r + '</button>'; }).join("")
+      + '</div><p class="note">' + (m.reasons.length ? '已标记错因：' + esc(m.reasons.join("、")) : '还没标记错因') + '</p>'
+      + '<textarea id="nt-' + m.id + '" onchange="updateMistakeField(\'' + m.id + '\',\'note\',this.value)" placeholder="备注：这道题背后还没理解什么">' + esc(m.note || "") + '</textarea></div>'
+      + '<div class="mistake-bottom"><p><b>思路总结：</b>' + esc(m.explain || "") + '</p><p><b>正确解法：</b>' + esc(m.answer || "") + '</p></div>'
+      + '<p><b>留白重做：</b></p><textarea id="rd-' + m.id + '" onchange="updateMistakeField(\'' + m.id + '\',\'redo\',this.value)" placeholder="遮住上面的解析，自己重做一遍写在这里">' + esc(m.redo || "") + '</textarea>'
+      + '<div class="row"><button class="btn small ' + (m.mastered ? 'on' : 'ghost') + '" onclick="toggleMastered(\'' + m.id + '\')">' + (m.mastered ? '✓ 已掌握' : '标为已掌握') + '</button>'
+      + '<button class="btn small danger" onclick="deleteMistake(\'' + m.id + '\')">删除</button></div></div>';
+  });
+  document.getElementById("main").innerHTML = html; renderMath();
+}
+function updateMistakeField(id, field, val) { var list = getMistakes(); list.forEach(function (m) { if (m.id === id) m[field] = val; }); storeSet("math-mistakes", list); }
+function toggleReason(id, r) { var list = getMistakes(); list.forEach(function (m) { if (m.id === id) { var i = m.reasons.indexOf(r); if (i === -1) m.reasons.push(r); else m.reasons.splice(i, 1); } }); storeSet("math-mistakes", list); renderMistakes(); }
+function toggleMastered(id) { var list = getMistakes(); list.forEach(function (m) { if (m.id === id) m.mastered = !m.mastered; }); storeSet("math-mistakes", list); renderMistakes(); updateMistakeCount(); }
+function deleteMistake(id) { storeSet("math-mistakes", getMistakes().filter(function (m) { return m.id !== id; })); renderMistakes(); updateMistakeCount(); }
+/* ============ 进度统计 ============ */
+function renderProgress() {
+  var prog = getProgress(), attempts = getAttempts(), list = getMistakes();
+  var done = Object.keys(attempts).length;
+  var mastered = list.filter(function (m) { return m.mastered; }).length;
+  var reasonCount = {}; list.forEach(function (m) { (m.reasons || []).forEach(function (r) { reasonCount[r] = (reasonCount[r] || 0) + 1; }); });
+  var html = '<div class="card"><h2>进度统计</h2>'
+    + '<p>已学完知识点：' + allPoints().filter(function (x) { return prog[x.pt.id]; }).length + ' / ' + allPoints().length + '</p>'
+    + '<p>自查过的练习题：' + done + ' 道</p>'
+    + '<p>错题：共 ' + list.length + ' 道，已掌握 ' + mastered + ' 道</p>'
+    + '<p>错因分布：' + REASONS.map(function (r) { return r + ' ' + (reasonCount[r] || 0) + ' 次'; }).join(' · ') + '</p></div>';
+  CHAPTERS.forEach(function (c) {
+    var pts = []; c.sections.forEach(function (s) { s.points.forEach(function (p) { pts.push(p); }); });
+    var learned = pts.filter(function (p) { return prog[p.id]; }).length;
+    html += '<div class="card"><h3>第' + c.num + '章 ' + esc(c.title) + '</h3><p>' + learned + ' / ' + pts.length + ' 个知识点</p>'
+      + '<div class="progress-bar"><div style="width:' + (pts.length ? Math.round(learned / pts.length * 100) : 0) + '%"></div></div></div>';
+  });
+  document.getElementById("main").innerHTML = html; renderMath();
+}
+/* ============ 启动 ============ */
+showTab("home");
+</script>
+</body>
+</html>
