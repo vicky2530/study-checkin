@@ -100,6 +100,14 @@
   .dash-table th, .dash-table td { border-bottom: 1px solid var(--border); padding: 8px 6px; text-align: left; vertical-align: middle; }
   .dash-table th { color: var(--muted); font-size: 13px; }
   .dash-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mock-timer { position: sticky; top: 52px; z-index: 9; background: #2e3245; color: #fff; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+  .mock-timer .t { font-size: 15px; font-variant-numeric: tabular-nums; }
+  .mock-timer .t b { font-size: 19px; }
+  .mock-timer .t.warn b { color: #ffb4b4; }
+  .mock-timer .sec-name { font-weight: bold; }
+  .score-big { font-size: 34px; font-weight: bold; color: var(--primary-dark); }
+  .mock-q { margin: 12px 0; }
+  .mock-q .qno { font-weight: bold; color: var(--primary-dark); }
   .word-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .word-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #fff; }
   .word-card .w { font-size: 17px; font-weight: bold; color: var(--primary-dark); }
@@ -179,6 +187,7 @@
   <button id="tab-words" onclick="switchTab('words')">单词</button>
   <button id="tab-practice" onclick="switchTab('practice')">练习题库</button>
   <button id="tab-dashboard" onclick="switchTab('dashboard')">进度看板</button>
+  <button id="tab-mock" onclick="switchTab('mock')">整套模考</button>
   <button id="tab-mistakes" onclick="switchTab('mistakes')">错题库 <span id="mis-count"></span></button>
   <button id="tab-prompt" onclick="switchTab('prompt')">提示词</button>
 </nav>
@@ -187,6 +196,7 @@
   <section id="view-words" style="display:none"></section>
   <section id="view-practice" style="display:none"></section>
   <section id="view-dashboard" style="display:none"></section>
+  <section id="view-mock" style="display:none"></section>
   <section id="view-mistakes" style="display:none"></section>
   <section id="view-prompt" style="display:none"></section>
 </main>
@@ -529,6 +539,603 @@ function renderDashboard() {
   $("view-dashboard").innerHTML = html;
 }
 
+/* ============ 整套模考（写作30′→听力25′→阅读40′→翻译30′，共约125分钟；只用已有题库拼卷，不新编题） ============ */
+var KEY_MOCK = "eng-mock-records"; /* 模考记录（只新增这一个 key）：[{id,date,auto,total,listening,reading,writing,translation,...}] */
+var MOCK_SECTIONS = [
+  { id: "writing", name: "写作", minutes: 30 },
+  { id: "listening", name: "听力", minutes: 25 },
+  { id: "reading", name: "阅读", minutes: 40 },
+  { id: "translation", name: "翻译", minutes: 30 }
+];
+var MOCK_TOTAL_MINUTES = 125;
+/* 四级分值（满分710）：写作106.5（15%），听力248.5（35%，25题，每题9.94），阅读248.5（35%：选词35.5+长篇71+仔细142），翻译106.5（15%） */
+var MOCK_W_LISTENING = 248.5 / 25;
+var MOCK_W_CLOZE = 3.55;
+var MOCK_W_MATCHING = 7.1;
+var MOCK_W_CAREFUL = 14.2;
+var MOCK_W_WRITING = 106.5;
+var MOCK_W_TRANSLATION = 106.5;
+var mock = null; /* 当前模考状态（只在内存里，中途刷新页面会丢失本次进度） */
+var mockTimer = null;
+var mockLpKey = ""; /* 当前加载到播放器的听力段 */
+function mockRound2(x) { return Math.round(x * 100) / 100; }
+function getMockRecords() { return loadJSON(KEY_MOCK, []); }
+function saveMockRecords(list) { saveJSON(KEY_MOCK, list); }
+
+/* 有种子的伪随机（默认用时间种子；测试传固定种子可复现） */
+function mockRng(seed) {
+  var s = (seed == null ? (Date.now() % 2147483647) : seed) >>> 0;
+  if (s === 0) s = 1;
+  return function () {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
+}
+function mockShuffle(arr, rnd) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(rnd() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+function mockVersioned(list, ver) {
+  return (list || []).map(function (e) { return { ver: ver, ep: e }; });
+}
+/* 从 pool 里挑 epCount 篇，使题数之和正好等于 qTarget；挑不到就返回前 epCount 篇（组卷时按需取前 qTarget 道） */
+function mockPickSum(pool, epCount, qTarget, qOf, rnd) {
+  for (var attempt = 0; attempt < 300; attempt++) {
+    var picked = mockShuffle(pool, rnd).slice(0, epCount);
+    var sum = 0;
+    picked.forEach(function (e) { sum += qOf(e.ep); });
+    if (sum === qTarget) return picked;
+  }
+  return pool.slice(0, epCount);
+}
+/* 组卷：写作1道，听力25题（短篇新闻3篇7题+短对话4期8题+听力篇章3篇10题），阅读30题（选词1篇10空+长篇1篇10题+仔细2篇10题），翻译1道 */
+function mockBuildPaper(seed) {
+  var rnd = mockRng(seed);
+  var paper = { id: "mock-" + Date.now().toString(36) + Math.floor(rnd() * 1e6).toString(36), createdAt: new Date().toISOString() };
+  var wPool = wMock().concat(wReal());
+  paper.writing = wPool.length ? { id: wPool[Math.floor(rnd() * wPool.length)].id } : null;
+  var tPool = (window.ENG_TRANSLATION_REAL || []).map(function (it) { return { tab: "real", id: it.id }; })
+    .concat((window.ENG_TRANSLATION_MOCK || []).map(function (it) { return { tab: "mock", id: it.id }; }));
+  paper.translation = tPool.length ? tPool[Math.floor(rnd() * tPool.length)] : null;
+  var newsPool = mockVersioned(window.ENG_NEWS_BASIC, "basic").concat(mockVersioned(window.ENG_NEWS_ADVANCED, "advanced"), mockVersioned(window.ENG_NEWS_REAL, "real"));
+  var dlgPool = mockVersioned(window.ENG_LISTENING_BASIC, "basic").concat(mockVersioned(window.ENG_LISTENING_ADVANCED, "advanced"), mockVersioned(window.ENG_LISTENING_EXAM, "real"));
+  var pasPool = mockVersioned(window.ENG_PASSAGE_BASIC, "basic").concat(mockVersioned(window.ENG_PASSAGE_ADVANCED, "advanced"), mockVersioned(window.ENG_PASSAGE_REAL, "real"));
+  function expandListening(picked, part, startNo, qTarget, qOf) {
+    var items = [];
+    picked.forEach(function (pe) {
+      var qs = qOf(pe.ep);
+      for (var i = 0; i < qs.length && items.length < qTarget; i++) {
+        items.push({ no: startNo + items.length, part: part, ver: pe.ver, epNo: pe.ep.no, qi: i });
+      }
+    });
+    return items;
+  }
+  paper.listening = [];
+  paper.listening = paper.listening.concat(expandListening(mockPickSum(newsPool, 3, 7, function (e) { return (e.questions || []).length; }, rnd), "news", 1, 7, function (e) { return e.questions || []; }));
+  paper.listening = paper.listening.concat(expandListening(mockPickSum(dlgPool, 4, 8, function (e) { return (e.items || []).length; }, rnd), "dialogue", 8, 8, function (e) { return e.items || []; }));
+  paper.listening = paper.listening.concat(expandListening(mockPickSum(pasPool, 3, 10, function (e) { return (e.questions || []).length; }, rnd), "passage", 16, 10, function (e) { return e.questions || []; }));
+  var clozePool = mockVersioned(window.ENG_CLOZE_BASIC, "basic").concat(mockVersioned(window.ENG_CLOZE_ADVANCED, "advanced"), mockVersioned(window.ENG_CLOZE_REAL, "real"));
+  var matchPool = mockVersioned(window.ENG_MATCHING_BASIC, "basic").concat(mockVersioned(window.ENG_MATCHING_ADVANCED, "advanced"), mockVersioned(window.ENG_MATCHING_REAL, "real"));
+  var readPool = mockVersioned(window.ENG_READING_BASIC, "basic").concat(mockVersioned(window.ENG_READING_ADVANCED, "advanced"), mockVersioned(window.ENG_READING_EXAM, "real"));
+  paper.reading = [];
+  var cz = mockShuffle(clozePool, rnd)[0];
+  if (cz) { for (var bi = 0; bi < 10; bi++) paper.reading.push({ no: 26 + bi, part: "cloze", ver: cz.ver, epNo: cz.ep.no, bi: bi }); }
+  var mt = mockShuffle(matchPool, rnd)[0];
+  if (mt) { for (var mi = 0; mi < 10; mi++) paper.reading.push({ no: 36 + mi, part: "matching", ver: mt.ver, epNo: mt.ep.no, qi: mi }); }
+  var rd = mockShuffle(readPool, rnd)[0];
+  if (rd) {
+    var no = 46;
+    (rd.ep.passages || []).forEach(function (p, pi) {
+      (p.questions || []).forEach(function (q, qi) {
+        if (no <= 55) paper.reading.push({ no: no++, part: "careful", ver: rd.ver, epNo: rd.ep.no, pi: pi, qi: qi });
+      });
+    });
+  }
+  return paper;
+}
+function mockListeningEp(it) {
+  if (it.part === "dialogue") return listeningEpisode(it.ver, it.epNo);
+  if (it.part === "news") return newsEpisode(it.ver, it.epNo);
+  return passageEpisode(it.ver, it.epNo);
+}
+function mockListeningQ(it) {
+  var ep = mockListeningEp(it);
+  if (!ep) return null;
+  if (it.part === "dialogue") return (ep.items || [])[it.qi] || null;
+  return (ep.questions || [])[it.qi] || null;
+}
+function mockReadingQ(it) {
+  if (it.part === "cloze") {
+    var ep = clozeEpisode(it.ver, it.epNo);
+    return ep && ep.blanks ? ep.blanks[it.bi] : null;
+  }
+  if (it.part === "matching") {
+    var ep2 = matchingEpisode(it.ver, it.epNo);
+    return ep2 && ep2.questions ? ep2.questions[it.qi] : null;
+  }
+  var ep3 = readingEpisode(it.ver, it.epNo);
+  var p = ep3 && ep3.passages ? ep3.passages[it.pi] : null;
+  return p && p.questions ? p.questions[it.qi] : null;
+}
+/* 判分：听力和阅读客观题自动判分；写作翻译不自动判分（自查打分） */
+function mockScorePaper(paper, answers) {
+  var res = {
+    listening: { correct: 0, total: 0, score: 0 },
+    reading: { correct: 0, total: 0, score: 0, cloze: { correct: 0, total: 0, score: 0 }, matching: { correct: 0, total: 0, score: 0 }, careful: { correct: 0, total: 0, score: 0 } },
+    wrong: []
+  };
+  (paper.listening || []).forEach(function (it) {
+    var q = mockListeningQ(it);
+    if (!q) return;
+    res.listening.total++;
+    var mine = answers["L" + it.no] || "";
+    var ok = mine !== "" && mine === q.answer;
+    if (ok) res.listening.correct++;
+    else res.wrong.push({ no: it.no, part: "listening", prompt: q.prompt || "", mine: mine || "未作答", answer: q.answer, analysis: q.analysis || "" });
+  });
+  res.listening.score = mockRound2(res.listening.correct * MOCK_W_LISTENING);
+  (paper.reading || []).forEach(function (it) {
+    var q = mockReadingQ(it);
+    if (!q) return;
+    var sub = res.reading[it.part];
+    if (!sub) return;
+    sub.total++;
+    res.reading.total++;
+    var mine = answers["R" + it.no] || "";
+    var ok = mine !== "" && mine === q.answer;
+    if (ok) { sub.correct++; res.reading.correct++; }
+    else {
+      var prompt = it.part === "cloze" ? ("选词填空第 " + it.no + " 空") : (q.prompt || q.statement || ("第 " + it.no + " 题"));
+      res.wrong.push({ no: it.no, part: "reading", prompt: prompt, mine: mine || "未作答", answer: q.answer, analysis: q.analysis || "" });
+    }
+  });
+  res.reading.cloze.score = mockRound2(res.reading.cloze.correct * MOCK_W_CLOZE);
+  res.reading.matching.score = mockRound2(res.reading.matching.correct * MOCK_W_MATCHING);
+  res.reading.careful.score = mockRound2(res.reading.careful.correct * MOCK_W_CAREFUL);
+  res.reading.score = mockRound2(res.reading.cloze.score + res.reading.matching.score + res.reading.careful.score);
+  return res;
+}
+function mockFmt(sec) {
+  sec = Math.max(0, sec | 0);
+  var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  function p(n) { return (n < 10 ? "0" : "") + n; }
+  return h > 0 ? h + ":" + p(m) + ":" + p(s) : p(m) + ":" + p(s);
+}
+function mockStart(seed) {
+  var paper = mockBuildPaper(seed);
+  if (!paper || !paper.writing || !paper.translation || paper.listening.length !== 25 || paper.reading.length !== 30) {
+    alert("题库数据不足，组卷失败。");
+    return;
+  }
+  mockStopTimer();
+  if (typeof lpStop === "function") lpStop();
+  mock = {
+    paper: paper, sectionIdx: 0, answers: {},
+    writingText: "", translationText: "",
+    writingScore: null, translationScore: null,
+    elapsed: 0, sectionElapsed: 0, submitted: false, submittedAt: null,
+    scores: null, recordId: null
+  };
+  mockLpKey = "";
+  mockStartTimer();
+  renderMock();
+}
+function mockStartTimer() {
+  mockStopTimer();
+  if (typeof setInterval === "function") mockTimer = setInterval(mockTick, 1000);
+}
+function mockStopTimer() {
+  if (mockTimer != null && typeof clearInterval === "function") clearInterval(mockTimer);
+  mockTimer = null;
+}
+/* 每秒走一格（测试直接调它模拟时间流逝） */
+function mockTick() {
+  if (!mock || mock.submitted) return;
+  mock.elapsed++;
+  mock.sectionElapsed++;
+  var totalLeft = MOCK_TOTAL_MINUTES * 60 - mock.elapsed;
+  if (totalLeft <= 0) { mockSubmit(true); return; }
+  var sec = MOCK_SECTIONS[mock.sectionIdx];
+  var secLeft = sec.minutes * 60 - mock.sectionElapsed;
+  if (secLeft <= 0) {
+    if (mock.sectionIdx < MOCK_SECTIONS.length - 1) mockGoSection(mock.sectionIdx + 1);
+    else mockSubmit(true);
+    return;
+  }
+  mockRenderTimer();
+}
+function mockRenderTimer() {
+  if (!mock) return;
+  var totalLeft = MOCK_TOTAL_MINUTES * 60 - mock.elapsed;
+  var sec = MOCK_SECTIONS[mock.sectionIdx];
+  var secLeft = sec.minutes * 60 - mock.sectionElapsed;
+  var a = $("mock-total-left"), b = $("mock-sec-left");
+  if (a) a.textContent = mockFmt(totalLeft);
+  if (b) b.textContent = mockFmt(secLeft);
+}
+function mockGoSection(idx) {
+  if (!mock || mock.submitted) return;
+  if (idx < 0 || idx >= MOCK_SECTIONS.length) return;
+  mock.sectionIdx = idx;
+  mock.sectionElapsed = 0;
+  if (typeof lpStop === "function") lpStop();
+  renderMock();
+}
+function mockSetAnswer(qid, letter) {
+  if (!mock || mock.submitted) return;
+  mock.answers[qid] = letter;
+  renderMock();
+}
+/* 听力播放：把某段录音装进共用的播放器（复用 LP） */
+function mockLpLoad(part, ver, epNo) {
+  var key = part + "-" + ver + "-" + epNo;
+  var segs = [];
+  if (part === "dialogue") {
+    var ep = listeningEpisode(ver, epNo);
+    if (!ep) return;
+    (ep.items || []).forEach(function (it) { segs = segs.concat(lpSplit(it.script)); });
+  } else if (part === "news") {
+    var ep2 = newsEpisode(ver, epNo);
+    if (!ep2) return;
+    segs = lpSplit(ep2.script);
+  } else {
+    var ep3 = passageEpisode(ver, epNo);
+    if (!ep3) return;
+    segs = lpSplit(ep3.script);
+  }
+  LP.segs = segs;
+  LP.idx = 0; LP.playing = false;
+  mockLpKey = key;
+  lpPlayPause();
+  renderMock();
+}
+function mockLpLabel() {
+  if (!mockLpKey) return "未播放";
+  var parts = mockLpKey.split("-");
+  var name = parts[0] === "news" ? "短篇新闻" : parts[0] === "dialogue" ? "短对话" : "听力篇章";
+  return name + " · 第 " + parts[parts.length - 1] + " 期";
+}
+function mockSubmit(auto) {
+  if (!mock || mock.submitted) return;
+  mockStopTimer();
+  if (typeof lpStop === "function") lpStop();
+  mock.submitted = true;
+  mock.submittedAt = new Date().toISOString();
+  mock.scores = mockScorePaper(mock.paper, mock.answers);
+  mock.scores.auto = !!auto;
+  mockRecordAttempts();
+  mockSaveRecord();
+  renderMock();
+}
+/* 客观题记入 eng-attempts（供进度看板统计），写作翻译记为自查（correct=null，与各模块一致） */
+function mockRecordAttempts() {
+  var p = mock.paper;
+  (p.listening || []).forEach(function (it) {
+    var q = mockListeningQ(it);
+    if (!q) return;
+    var mine = mock.answers["L" + it.no] || "";
+    var mod = it.part === "news" ? "listening-news" : it.part === "dialogue" ? "listening-dialogue" : "listening-passage";
+    var edition = it.part === "news" ? "news-" + it.ver : it.part === "passage" ? "passage-" + it.ver : it.ver;
+    recordAttempt(mod, edition + "-" + it.epNo + "-" + it.qi, mine !== "" && mine === q.answer);
+  });
+  (p.reading || []).forEach(function (it) {
+    var q = mockReadingQ(it);
+    if (!q) return;
+    var mine = mock.answers["R" + it.no] || "";
+    if (it.part === "cloze") recordAttempt("cloze", it.ver + "-" + it.epNo + "-" + it.bi, mine !== "" && mine === q.answer);
+    else if (it.part === "matching") recordAttempt("matching", it.ver + "-" + it.epNo + "-" + it.qi, mine !== "" && mine === q.answer);
+    else recordAttempt("reading", it.ver + "-" + it.epNo + "-" + it.pi + "-" + it.qi, mine !== "" && mine === q.answer);
+  });
+  recordAttempt("writing", p.writing.id, null);
+  recordAttempt("translation", p.translation.tab + "-" + p.translation.id, null);
+}
+function mockSaveRecord() {
+  var s = mock.scores;
+  var rec = {
+    id: mock.paper.id,
+    date: mock.submittedAt,
+    auto: !!s.auto,
+    listening: s.listening.score,
+    listeningCorrect: s.listening.correct,
+    listeningTotal: s.listening.total,
+    reading: s.reading.score,
+    readingCorrect: s.reading.correct,
+    readingTotal: s.reading.total,
+    readingSub: { cloze: s.reading.cloze.score, matching: s.reading.matching.score, careful: s.reading.careful.score },
+    writing: mock.writingScore,
+    translation: mock.translationScore,
+    writingWords: wCountWords(mock.writingText || ""),
+    objectiveTotal: mockRound2(s.listening.score + s.reading.score),
+    total: mockRound2(s.listening.score + s.reading.score + (mock.writingScore || 0) + (mock.translationScore || 0))
+  };
+  var list = getMockRecords();
+  list.unshift(rec);
+  saveMockRecords(list);
+  mock.recordId = rec.id;
+}
+function mockUpdateRecord() {
+  var list = getMockRecords();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id === mock.recordId) {
+      list[i].writing = mock.writingScore;
+      list[i].translation = mock.translationScore;
+      list[i].total = mockRound2(mock.scores.listening.score + mock.scores.reading.score + (mock.writingScore || 0) + (mock.translationScore || 0));
+      break;
+    }
+  }
+  saveMockRecords(list);
+}
+function mockSetSelfScore(which, val) {
+  if (!mock || !mock.submitted) return;
+  var v = parseFloat(val);
+  if (isNaN(v)) v = 0;
+  v = Math.max(0, Math.min(106.5, v));
+  if (which === "writing") mock.writingScore = v;
+  else mock.translationScore = v;
+  mockUpdateRecord();
+  renderMock();
+}
+function mockTimerHTML() {
+  var totalLeft = MOCK_TOTAL_MINUTES * 60 - mock.elapsed;
+  var sec = MOCK_SECTIONS[mock.sectionIdx];
+  var secLeft = sec.minutes * 60 - mock.sectionElapsed;
+  var warn = totalLeft <= 300 || secLeft <= 60;
+  return '<div class="mock-timer"><span class="sec-name">' + esc(sec.name) + '</span>' +
+    '<span class="t' + (warn ? " warn" : "") + '">总剩余 <b id="mock-total-left">' + mockFmt(totalLeft) + '</b></span>' +
+    '<span class="t' + (secLeft <= 60 ? " warn" : "") + '">本部分剩余 <b id="mock-sec-left">' + mockFmt(secLeft) + '</b></span>' +
+    '<span class="t">第 ' + (mock.sectionIdx + 1) + ' / 4 部分</span></div>';
+}
+function mockOptQ(qid, no, prompt, options) {
+  var html = '<div class="mock-q"><p><span class="qno">' + no + '.</span> ' + esc(prompt || "") + "</p>";
+  (options || []).forEach(function (op, oi) {
+    var letter = "ABCD"[oi];
+    var cls = "opt";
+    if (mock.answers[qid] === letter) cls += " sel";
+    html += '<button class="' + cls + '" onclick="mockSetAnswer(\'' + qid + '\',\'' + letter + '\')">' + letter + ". " + esc(op) + "</button>";
+  });
+  html += "</div>";
+  return html;
+}
+function mockClozeHTML(ep) {
+  var html = "";
+  String(ep.text || "").split(/(\{\{\d+\}\})/g).forEach(function (part) {
+    var m = part.match(/^\{\{(\d+)\}\}$/);
+    if (m) {
+      var num = +m[1];
+      var qid = "R" + num;
+      var cur = mock.answers[qid] || "";
+      html += '<select onchange="mockSetAnswer(\'' + qid + '\', this.value)" style="width:auto;min-width:120px;display:inline-block;margin:0 2px">';
+      html += '<option value="">-- ' + num + ' --</option>';
+      (ep.bank || []).forEach(function (w, i) {
+        var letter = "ABCDEFGHIJKLMNO"[i];
+        html += '<option value="' + letter + '"' + (cur === letter ? " selected" : "") + '>' + letter + ". " + esc(w) + "</option>";
+      });
+      html += "</select>";
+    } else {
+      html += esc(part);
+    }
+  });
+  return html;
+}
+function mockWritingHTML() {
+  var q = wFind(mock.paper.writing.id);
+  if (!q) return '<p class="muted">写作题加载失败。</p>';
+  var html = '<p class="muted">' + (q.kind === "real" ? "真题 · " + esc(q.source || "") : "模拟题") + (q.type ? " · " + esc(q.type) : "") + ' · 120–180 词 · 30 分钟</p>';
+  html += "<h3>题目要求</h3><pre class=\"light\">" + esc(q.prompt || "") + "</pre>";
+  html += "<h3>你的作文</h3>";
+  html += '<textarea id="mock-w" oninput="mock.writingText=this.value;var c=document.getElementById(\'mock-w-count\');if(c)c.textContent=wCountWords(this.value)+\' 词\'" placeholder="在这里写你的作文……">' + esc(mock.writingText || "") + "</textarea>";
+  html += '<p class="muted">已写 <b id="mock-w-count">' + wCountWords(mock.writingText || "") + ' 词</b>（要求 120–180 词）</p>';
+  return html;
+}
+function mockTranslationHTML() {
+  var it = trFind(mock.paper.translation.tab, mock.paper.translation.id);
+  if (!it) return '<p class="muted">翻译题加载失败。</p>';
+  var html = "<h3>中文原文</h3><pre class=\"light\">" + esc(it.chinese || "") + "</pre>";
+  html += "<h3>你的译文</h3>";
+  html += '<textarea id="mock-t" oninput="mock.translationText=this.value" placeholder="在这里写你的英文译文……">' + esc(mock.translationText || "") + "</textarea>";
+  return html;
+}
+function mockListeningHTML() {
+  var html = '<div class="card"><h3>听力播放器</h3><p class="muted">点每段的“播放本段”听录音（浏览器朗读版），听完再答题；可以重播。</p>';
+  html += '<div class="player"><div class="pctrl"><button class="btn" id="lp-play" onclick="lpPlayPause()">播放</button><button class="btn ghost" onclick="lpStop()">停止</button><label style="margin:0">倍速 <select id="lp-rate" onchange="LP.rate=+this.value;if(LP.playing){var i=LP.idx;lpSpeakFrom(i);}"><option value="0.75">0.75x</option><option value="1" selected>1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option></select></label></div>';
+  html += '<div class="pbar" onclick="var r=this.getBoundingClientRect();lpSeek((event.clientX-r.left)/r.width)"><i id="lp-fill"></i></div><div class="muted" id="lp-label"></div>';
+  html += '<p class="muted">当前播放：<b>' + esc(mockLpLabel()) + "</b></p></div>";
+  var parts = [["news", "Section A · 短篇新闻"], ["dialogue", "Section B · 短对话"], ["passage", "Section C · 听力篇章"]];
+  parts.forEach(function (pp) {
+    var items = mock.paper.listening.filter(function (it) { return it.part === pp[0]; });
+    if (!items.length) return;
+    html += "<h3>" + pp[1] + "（" + items.length + " 题）</h3>";
+    var groups = {};
+    var order = [];
+    items.forEach(function (it) {
+      var k = it.ver + "-" + it.epNo;
+      if (!groups[k]) { groups[k] = []; order.push(k); }
+      groups[k].push(it);
+    });
+    order.forEach(function (k) {
+      var group = groups[k];
+      var first = group[0];
+      var ep = mockListeningEp(first);
+      var title = first.part === "dialogue" ? ("短对话 · 第 " + first.epNo + " 期") : (ep && ep.title ? ep.title : ("第 " + first.epNo + " 期"));
+      html += '<div class="card"><h3>' + esc(title) + ' <button class="btn ghost small" onclick="mockLpLoad(\'' + first.part + "','" + first.ver + "'," + first.epNo + ')">播放本段</button></h3>';
+      group.forEach(function (it) {
+        var q = mockListeningQ(it);
+        if (!q) return;
+        html += mockOptQ("L" + it.no, it.no, q.prompt, q.options);
+      });
+      html += "</div>";
+    });
+  });
+  return html;
+}
+function mockReadingHTML() {
+  var html = "";
+  var clozeItems = mock.paper.reading.filter(function (it) { return it.part === "cloze"; });
+  if (clozeItems.length) {
+    var ep = clozeEpisode(clozeItems[0].ver, clozeItems[0].epNo);
+    if (ep) {
+      html += "<h3>Section A · 选词填空（26–35 题，共 10 空）</h3>";
+      html += '<p class="muted">' + esc(ep.title || "") + ' · 下拉框选词填空，每个词只能用一次。</p>';
+      html += '<div class="card">' + mockClozeHTML(ep) + "</div>";
+      html += '<div class="card"><h3>词库（A–O）</h3><div class="bank-grid">';
+      (ep.bank || []).forEach(function (w, i) {
+        html += '<span class="bank-word">' + "ABCDEFGHIJKLMNO"[i] + ". " + esc(w) + "</span>";
+      });
+      html += "</div></div>";
+    }
+  }
+  var mItems = mock.paper.reading.filter(function (it) { return it.part === "matching"; });
+  if (mItems.length) {
+    var ep2 = matchingEpisode(mItems[0].ver, mItems[0].epNo);
+    if (ep2) {
+      var lastLabel = (ep2.paragraphs[ep2.paragraphs.length - 1] || {}).label || "L";
+      html += "<h3>Section B · 长篇匹配（36–45 题，共 10 题）</h3>";
+      html += '<p class="muted">' + esc(ep2.title || "") + " · 每句选一段（A–" + esc(lastLabel) + "）。</p>";
+      html += '<div class="card">';
+      (ep2.paragraphs || []).forEach(function (p) {
+        html += "<p><b>" + esc(p.label) + ".</b> " + esc(p.text || "") + "</p>";
+      });
+      html += "</div>";
+      mItems.forEach(function (it) {
+        var q = mockReadingQ(it);
+        if (!q) return;
+        html += '<div class="mock-q"><p><span class="qno">' + it.no + '.</span> ' + esc(q.statement || "") + "</p>";
+        html += '<select onchange="mockSetAnswer(\'R' + it.no + '\', this.value)" style="width:auto;min-width:200px;display:inline-block">';
+        html += '<option value="">-- 选一段 --</option>';
+        (ep2.paragraphs || []).forEach(function (p) {
+          html += '<option value="' + esc(p.label) + '"' + (mock.answers["R" + it.no] === p.label ? " selected" : "") + '>' + esc(p.label) + " 段</option>";
+        });
+        html += "</select></div>";
+      });
+    }
+  }
+  var cItems = mock.paper.reading.filter(function (it) { return it.part === "careful"; });
+  if (cItems.length) {
+    html += "<h3>Section C · 仔细阅读（46–55 题，共 10 题）</h3>";
+    var groups = {};
+    var order = [];
+    cItems.forEach(function (it) {
+      var k = it.ver + "-" + it.epNo + "-" + it.pi;
+      if (!groups[k]) { groups[k] = []; order.push(k); }
+      groups[k].push(it);
+    });
+    order.forEach(function (k) {
+      var group = groups[k];
+      var first = group[0];
+      var ep3 = readingEpisode(first.ver, first.epNo);
+      var p = ep3 && ep3.passages ? ep3.passages[first.pi] : null;
+      if (!p) return;
+      html += '<div class="card"><h3>' + esc(p.title || "") + "</h3><p>" + esc(p.text || "") + "</p>";
+      group.forEach(function (it) {
+        var q = mockReadingQ(it);
+        if (!q) return;
+        html += mockOptQ("R" + it.no, it.no, q.prompt, q.options);
+      });
+      html += "</div>";
+    });
+  }
+  return html;
+}
+function renderMockHome() {
+  var html = '<div class="card"><h2>整套模考</h2><p class="muted">按四级真题顺序和时间：写作 30 分钟 → 听力 25 分钟 → 阅读 40 分钟 → 翻译 30 分钟，共约 125 分钟。听力和阅读客观题自动判分，写作和翻译对照范文自查打分。总分 710 分（写作 15% · 听力 35% · 阅读 35% · 翻译 15%）。</p>';
+  html += '<p class="muted">每套卷从现有题库里随机抽题，每次开考换一套。考试中途刷新页面会丢失本次模考进度；各部分按顺序做，时间到了自动进入下一部分。</p>';
+  html += '<button class="btn" onclick="mockStart()">开始模考</button></div>';
+  var recs = getMockRecords();
+  if (recs.length) {
+    html += '<div class="card"><h2>模考记录（' + recs.length + ' 次）</h2><table class="dash-table"><thead><tr><th>日期</th><th>总分</th><th>听力</th><th>阅读</th><th>写作</th><th>翻译</th></tr></thead><tbody>';
+    recs.forEach(function (r) {
+      html += "<tr><td>" + esc((r.date || "").slice(0, 10)) + (r.auto ? "（自动交卷）" : "") + "</td>";
+      html += '<td class="num">' + (r.total == null ? "—" : r.total) + " / 710</td>";
+      html += '<td class="num">' + r.listening + " / 248.5</td>";
+      html += '<td class="num">' + r.reading + " / 248.5</td>";
+      html += '<td class="num">' + (r.writing == null ? "待自查" : r.writing + " / 106.5") + "</td>";
+      html += '<td class="num">' + (r.translation == null ? "待自查" : r.translation + " / 106.5") + "</td></tr>";
+    });
+    html += "</tbody></table></div>";
+  } else {
+    html += '<div class="card"><p class="muted">还没有模考记录，考完一套就会出现在这里。</p></div>';
+  }
+  $("view-mock").innerHTML = html;
+}
+function renderMockExam() {
+  var sec = MOCK_SECTIONS[mock.sectionIdx];
+  var html = mockTimerHTML();
+  html += '<div class="card"><h2>第 ' + (mock.sectionIdx + 1) + " 部分 · " + esc(sec.name) + " · " + sec.minutes + ' 分钟</h2>';
+  if (sec.id === "writing") html += mockWritingHTML();
+  else if (sec.id === "listening") html += mockListeningHTML();
+  else if (sec.id === "reading") html += mockReadingHTML();
+  else html += mockTranslationHTML();
+  html += "</div>";
+  html += '<div style="margin-top:12px">';
+  if (mock.sectionIdx < MOCK_SECTIONS.length - 1) {
+    html += '<button class="btn" onclick="mockGoSection(' + (mock.sectionIdx + 1) + ')">下一部分：' + MOCK_SECTIONS[mock.sectionIdx + 1].name + '</button> ';
+  } else {
+    html += '<button class="btn" onclick="mockSubmit(false)">交卷</button> ';
+  }
+  html += '<button class="btn ghost" onclick="mockSubmit(false)">提前交卷</button></div>';
+  $("view-mock").innerHTML = html;
+  if (typeof lpRenderProgress === "function") lpRenderProgress();
+}
+function renderMockReport() {
+  var s = mock.scores;
+  var wScore = mock.writingScore, tScore = mock.translationScore;
+  var objTotal = mockRound2(s.listening.score + s.reading.score);
+  var total = mockRound2(objTotal + (wScore || 0) + (tScore || 0));
+  var html = '<div class="card"><h2>模考成绩单</h2>';
+  html += '<p class="muted">' + esc(mock.paper.id) + " · " + esc((mock.submittedAt || "").slice(0, 10)) + (s.auto ? " · 时间到自动交卷" : " · 提前交卷") + "</p>";
+  html += '<p><span class="score-big">' + total + '</span><span class="muted"> / 710 分' + ((wScore == null || tScore == null) ? "（写作 / 翻译未自查打分，只计客观题）" : "") + "</span></p>";
+  html += '<p class="muted">客观题合计 ' + objTotal + ' / 497 分（听力 248.5 + 阅读 248.5）。四级 425 分过线。</p></div>';
+  html += '<div class="card"><h2>各部分分数</h2><table class="dash-table"><thead><tr><th>部分</th><th>得分</th><th>答对</th><th>满分</th></tr></thead><tbody>';
+  html += '<tr><td>写作（自查）</td><td class="num">' + (wScore == null ? "待自查" : wScore + " / 106.5") + '</td><td class="num">—</td><td class="num">106.5</td></tr>';
+  html += '<tr><td>听力</td><td class="num">' + s.listening.score + ' / 248.5</td><td class="num">' + s.listening.correct + " / " + s.listening.total + '</td><td class="num">248.5</td></tr>';
+  html += '<tr><td>阅读</td><td class="num">' + s.reading.score + ' / 248.5</td><td class="num">' + s.reading.correct + " / " + s.reading.total + '</td><td class="num">248.5</td></tr>';
+  html += '<tr><td>　选词填空</td><td class="num">' + s.reading.cloze.score + ' / 35.5</td><td class="num">' + s.reading.cloze.correct + " / " + s.reading.cloze.total + '</td><td class="num">35.5</td></tr>';
+  html += '<tr><td>　长篇匹配</td><td class="num">' + s.reading.matching.score + ' / 71</td><td class="num">' + s.reading.matching.correct + " / " + s.reading.matching.total + '</td><td class="num">71</td></tr>';
+  html += '<tr><td>　仔细阅读</td><td class="num">' + s.reading.careful.score + ' / 142</td><td class="num">' + s.reading.careful.correct + " / " + s.reading.careful.total + '</td><td class="num">142</td></tr>';
+  html += '<tr><td>翻译（自查）</td><td class="num">' + (tScore == null ? "待自查" : tScore + " / 106.5") + '</td><td class="num">—</td><td class="num">106.5</td></tr>';
+  html += "</tbody></table></div>";
+  var wq = wFind(mock.paper.writing.id);
+  html += '<div class="card"><h2>写作 · 自查打分</h2><p class="muted">对照范文给自己打分（0–106.5 分），保存后计入总分。</p>';
+  html += "<p><b>你的作文（" + wCountWords(mock.writingText || "") + " 词）：</b></p><pre class=\"light\">" + esc(mock.writingText || "（未写）") + "</pre>";
+  if (wq) {
+    html += "<p><b>参考范文：</b></p>" + tappableText((wq.essay || []).join("\n\n"), "writing", 0, "none");
+  }
+  html += '<label>我的写作自查分（0–106.5）</label><input type="number" id="mock-w-score" min="0" max="106.5" step="0.5" value="' + (wScore == null ? "" : wScore) + '" placeholder="比如 80">';
+  html += '<button class="btn small" onclick="mockSetSelfScore(\'writing\', document.getElementById(\'mock-w-score\').value)">保存写作自查分</button>';
+  if (wScore != null) html += '<p class="done-mark">已保存写作自查分 ' + wScore + " 分</p>";
+  html += "</div>";
+  var tq = trFind(mock.paper.translation.tab, mock.paper.translation.id);
+  html += '<div class="card"><h2>翻译 · 自查打分</h2><p class="muted">对照参考译文给自己打分（0–106.5 分），保存后计入总分。</p>';
+  html += "<p><b>你的译文：</b></p><pre class=\"light\">" + esc(mock.translationText || "（未写）") + "</pre>";
+  if (tq) {
+    html += "<p><b>参考译文：</b></p>" + tappableText(tq.reference || "", "translation", 0, "none");
+  }
+  html += '<label>我的翻译自查分（0–106.5）</label><input type="number" id="mock-t-score" min="0" max="106.5" step="0.5" value="' + (tScore == null ? "" : tScore) + '" placeholder="比如 80">';
+  html += '<button class="btn small" onclick="mockSetSelfScore(\'translation\', document.getElementById(\'mock-t-score\').value)">保存翻译自查分</button>';
+  if (tScore != null) html += '<p class="done-mark">已保存翻译自查分 ' + tScore + " 分</p>";
+  html += "</div>";
+  if (s.wrong.length) {
+    html += '<div class="card"><h2>错题回顾（' + s.wrong.length + ' 道）</h2><p class="muted">只列答错和没答的题，点开看解析。</p>';
+    s.wrong.forEach(function (w) {
+      html += '<div class="explain-sec"><p><b>第 ' + w.no + ' 题（' + (w.part === "listening" ? "听力" : "阅读") + '）：</b>' + esc(w.prompt || "") + '</p><p>你选：<b style="color:var(--red)">' + esc(w.mine) + '</b>　正确答案：<b style="color:var(--green)">' + esc(w.answer) + "</b></p>" + (w.analysis ? "<p class=\"muted\">" + esc(w.analysis) + "</p>" : "") + "</div>";
+    });
+    html += "</div>";
+  } else {
+    html += '<div class="card"><h2>错题回顾</h2><p class="done-mark">客观题全对，没有错题。</p></div>';
+  }
+  html += '<div style="margin-top:12px"><button class="btn" onclick="mockStart()">再考一套</button> <button class="btn ghost" onclick="switchTab(\'dashboard\')">去看进度看板</button></div>';
+  $("view-mock").innerHTML = html;
+}
+function renderMock() {
+  if (!mock) { renderMockHome(); return; }
+  if (mock.submitted) { renderMockReport(); return; }
+  renderMockExam();
+}
+
 /* ============ 错题库 ============ */
 function getMistakes() { return loadJSON(KEY_MISTAKES, []); }
 function addMistake(m) {
@@ -703,7 +1310,7 @@ function countMatchingMarks(edition, episode) {
 }
 
 /* ============ 页签切换 ============ */
-var TABS = ["learn", "words", "practice", "dashboard", "mistakes", "prompt"];
+var TABS = ["learn", "words", "practice", "dashboard", "mock", "mistakes", "prompt"];
 function switchTab(t) {
   TABS.forEach(function (x) {
     $("tab-" + x).classList.toggle("active", x === t);
@@ -714,6 +1321,7 @@ function switchTab(t) {
   if (t === "words") renderWords();
   if (t === "practice") renderPractice();
   if (t === "dashboard") renderDashboard();
+  if (t === "mock") renderMock();
   if (t === "mistakes") renderMistakes();
   if (t === "prompt") renderPrompt();
 }
