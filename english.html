@@ -109,6 +109,9 @@
   .tap-word.mark-hl { background: rgba(255, 233, 110, 0.55); }
   .tap-word.mark-ul { border-bottom: 2px solid var(--primary); }
   .tap-word.mark-preview { background: rgba(120, 140, 255, 0.35); outline: 1px dashed var(--primary); }
+  /* 标记桥接：连续同种标记词之间的空格/标点也包上同种样式，下划线和荧光连成一整条 */
+  .mark-bridge.mark-hl { background: rgba(255, 233, 110, 0.55); }
+  .mark-bridge.mark-ul { border-bottom: 2px solid var(--primary); }
   .cloze-blank { display: inline-block; min-width: 64px; padding: 1px 8px; margin: 0 2px; border: 1px dashed #8a8fb0; border-radius: 6px; background: #f0f1f8; color: var(--primary-dark); font-family: Georgia, "Times New Roman", serif; font-size: 15px; cursor: pointer; vertical-align: baseline; }
   .cloze-blank:hover { border-color: var(--primary); background: var(--primary-light); }
   .cloze-blank.sel { border-style: solid; border-color: var(--primary); background: var(--primary-light); font-weight: bold; }
@@ -124,6 +127,12 @@
   .pen-toolbar .lbl { font-size: 13px; color: var(--muted); margin-right: 2px; }
   .pen-toolbar button { padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; color: var(--muted); cursor: pointer; }
   .pen-toolbar button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .pen-toolbar button:disabled { opacity: 0.45; cursor: default; }
+  .pen-toolbar .color-dot { width: 22px; height: 22px; min-width: 22px; padding: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border); cursor: pointer; }
+  .pen-toolbar .color-dot.active { box-shadow: 0 0 0 2px var(--primary); }
+  /* 手写画布：盖在文章上方一层透明画布，跟文章一起滚动 */
+  .ink-wrap { position: relative; }
+  .ink-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; touch-action: none; pointer-events: none; }
   .passage { font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.9; }
   .passage p { margin-bottom: 12px; }
   .ep-list { display: flex; flex-direction: column; gap: 6px; }
@@ -199,6 +208,69 @@ var KEY_CWORDS = "eng-cloze-words";
 var KEY_CMARKS = "eng-cloze-marks";
 var KEY_MWORDS = "eng-matching-words";
 var KEY_MMARKS = "eng-matching-marks";
+var KEY_INK = "eng-ink"; /* 手写笔迹：{篇章 key: [{color,width,pts:[[x,y],...]}]} */
+var KEY_PEN_COLOR = "eng-pen-color"; /* 当前标记颜色 */
+
+/* 标记颜色：默认 + 蓝/红/绿/橙/紫；hl 是荧光背景色，ul 是下划线颜色 */
+var PEN_COLORS = {
+  "default": { name: "默认", hl: "rgba(255,233,110,0.55)", ul: "#5b6abf" },
+  "blue":    { name: "蓝",   hl: "rgba(147,197,253,0.55)", ul: "#2563eb" },
+  "red":     { name: "红",   hl: "rgba(252,165,165,0.55)", ul: "#dc2626" },
+  "green":   { name: "绿",   hl: "rgba(134,239,172,0.55)", ul: "#16a34a" },
+  "orange":  { name: "橙",   hl: "rgba(253,186,116,0.55)", ul: "#ea580c" },
+  "purple":  { name: "紫",   hl: "rgba(216,180,254,0.55)", ul: "#9333ea" }
+};
+var penColor = "default"; /* 当前选的颜色 key */
+try {
+  var _pc = localStorage.getItem(KEY_PEN_COLOR);
+  if (_pc && PEN_COLORS[_pc]) penColor = _pc;
+} catch (e) {}
+function setPenColor(color) {
+  if (!PEN_COLORS[color]) color = "default";
+  penColor = color;
+  try { localStorage.setItem(KEY_PEN_COLOR, color); } catch (e) {}
+  renderPractice();
+}
+/* 标记值格式：默认色存 "hl"/"ul"（兼容旧数据与旧测试），非默认色存 "hl:红" / "ul:蓝" */
+function parseMark(v) {
+  if (!v) return null;
+  var parts = String(v).split(":");
+  var kind = parts[0];
+  if (kind !== "hl" && kind !== "ul") return null;
+  var color = parts[1] || "default";
+  if (!PEN_COLORS[color]) color = "default";
+  return { kind: kind, color: color };
+}
+function markValue(kind, color) {
+  if (!color || color === "default" || !PEN_COLORS[color]) return kind;
+  return kind + ":" + color;
+}
+/* 标记对应的 class 与内联样式（默认色走 CSS，非默认色用内联样式覆盖颜色） */
+function markClsStyle(mk) {
+  var p = parseMark(mk);
+  if (!p) return { cls: "", style: "" };
+  var cls = p.kind === "hl" ? " mark-hl" : " mark-ul";
+  var style = "";
+  if (p.color !== "default" && PEN_COLORS[p.color]) {
+    if (p.kind === "hl") style = ' style="background:' + PEN_COLORS[p.color].hl + '"';
+    else style = ' style="border-bottom-color:' + PEN_COLORS[p.color].ul + '"';
+  }
+  return { cls: cls, style: style };
+}
+/* 桥接判定：token 列表里第 i 个非单词 token，若前后最近的单词标记同种同色则返回该标记，否则 null（空位按钮会阻断） */
+function bridgeMarkFor(toks, i) {
+  var pm = null, nm = null, j, k;
+  for (j = i - 1; j >= 0; j--) {
+    if (toks[j].blank) break;
+    if (toks[j].word) { pm = parseMark(toks[j].mk); break; }
+  }
+  for (k = i + 1; k < toks.length; k++) {
+    if (toks[k].blank) break;
+    if (toks[k].word) { nm = parseMark(toks[k].mk); break; }
+  }
+  if (pm && nm && pm.kind === nm.kind && pm.color === nm.color) return pm;
+  return null;
+}
 
 /* 迁移唯一一条旧数据：听力生词 inquiry（basic 第1期，n.，询问，未掌握） */
 (function seedListeningWord() {
@@ -1161,18 +1233,32 @@ function tappableHTML(text, edition, episode, pi) {
     var re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s]+|\s+/g;
     var m;
     var wIdx = 0;
+    var toks = [];
     while ((m = re.exec(para)) !== null) {
       var tok = m[0];
       if (/^[A-Za-z]/.test(tok)) {
         var key = paraIdx + ":" + wIdx;
-        var mk = pmarks[key] || "";
-        var cls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
-        var midx = markWordList.length;
-        markWordList.push({ mk: "r", ed: edition, ep: episode, pi: pi, para: paraIdx, w: wIdx });
-        out += '<span class="' + cls + '" data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMark(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
+        toks.push({ t: tok, word: true, mk: pmarks[key] || "", w: wIdx });
         wIdx++;
       } else {
-        out += esc(tok);
+        toks.push({ t: tok, word: false });
+      }
+    }
+    for (var i = 0; i < toks.length; i++) {
+      var tk = toks[i];
+      if (tk.word) {
+        var cs = markClsStyle(tk.mk);
+        var midx = markWordList.length;
+        markWordList.push({ mk: "r", ed: edition, ep: episode, pi: pi, para: paraIdx, w: tk.w });
+        out += '<span class="tap-word' + cs.cls + '"' + cs.style + ' data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMark(\'' + tk.t.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + tk.w + ')">' + esc(tk.t) + "</span>";
+      } else {
+        var bm = bridgeMarkFor(toks, i);
+        if (bm) {
+          var bcs = markClsStyle(markValue(bm.kind, bm.color));
+          out += '<span class="mark-bridge' + bcs.cls + '"' + bcs.style + '>' + esc(tk.t) + "</span>";
+        } else {
+          out += esc(tk.t);
+        }
       }
     }
     out += "</p>";
@@ -1184,6 +1270,7 @@ var penMode = "lookup";
 function tapWordOrMark(word, edition, episode, pi, paraIdx, wIdx) {
   if (penMode === "lookup") { suppressMarkClick = false; tapWord(word, edition, episode); return; }
   if (suppressMarkClick) { suppressMarkClick = false; return; }
+  if (penMode === "handwrite" || penMode === "ink-eraser") return;
   var marks = getEpisodeMarks(edition, episode);
   var pkey = String(pi);
   if (!marks[pkey]) marks[pkey] = {};
@@ -1192,8 +1279,9 @@ function tapWordOrMark(word, edition, episode, pi, paraIdx, wIdx) {
     delete marks[pkey][key];
   } else {
     var kind = penMode === "hl" ? "hl" : "ul";
-    if (marks[pkey][key] === kind) delete marks[pkey][key];
-    else marks[pkey][key] = kind;
+    var val = markValue(kind, penColor);
+    if (marks[pkey][key] === val) delete marks[pkey][key];
+    else marks[pkey][key] = val;
   }
   if (Object.keys(marks[pkey]).length === 0) delete marks[pkey];
   setEpisodeMarks(edition, episode, marks);
@@ -1215,7 +1303,7 @@ function applyMarkRange(kind, a, b) {
     for (i = lo; i <= hi; i++) {
       p = markWordList[i];
       if (!p || p.mk !== mk || p.ed !== ed || p.ep !== ep) continue;
-      marks["0"][p.para + ":" + p.w] = kind;
+      marks["0"][p.para + ":" + p.w] = markValue(kind, penColor);
     }
     setClozeEpisodeMarks(ed, ep, marks);
   } else if (mk === "m") {
@@ -1225,7 +1313,7 @@ function applyMarkRange(kind, a, b) {
       if (!p || p.mk !== mk || p.ed !== ed || p.ep !== ep) continue;
       pk = String(p.pi);
       if (!marks2[pk]) marks2[pk] = {};
-      marks2[pk][p.para + ":" + p.w] = kind;
+      marks2[pk][p.para + ":" + p.w] = markValue(kind, penColor);
     }
     setMatchingEpisodeMarks(ed, ep, marks2);
   } else {
@@ -1235,7 +1323,7 @@ function applyMarkRange(kind, a, b) {
       if (!p || p.mk !== mk || p.ed !== ed || p.ep !== ep) continue;
       pk = String(p.pi);
       if (!marks3[pk]) marks3[pk] = {};
-      marks3[pk][p.para + ":" + p.w] = kind;
+      marks3[pk][p.para + ":" + p.w] = markValue(kind, penColor);
     }
     setEpisodeMarks(ed, ep, marks3);
   }
@@ -1319,6 +1407,202 @@ function setPenMode(mode) {
   suppressMarkClick = false;
   penMode = mode;
   renderPractice();
+}
+/* ============ 手写笔：在文章上方一层透明画布上自由手写，笔迹按篇章存 localStorage ============ */
+function penColorValue() {
+  var c = PEN_COLORS[penColor];
+  return c ? c.ul : "#5b6abf";
+}
+function inkKeyOf(cv) {
+  if (cv && cv.getAttribute) { var k = cv.getAttribute("data-ink"); if (k) return k; }
+  return "";
+}
+function getInkAll() { return loadJSON(KEY_INK, {}); }
+function getInkStrokes(key) {
+  if (!key) return [];
+  var all = getInkAll();
+  return all[key] || [];
+}
+function saveInkStrokes(key, strokes) {
+  if (!key) return;
+  var all = getInkAll();
+  all[key] = strokes;
+  saveJSON(KEY_INK, all);
+}
+function inkAddStroke(key, st) {
+  if (!key || !st) return;
+  var arr = getInkStrokes(key);
+  arr.push(st);
+  saveInkStrokes(key, arr);
+}
+function inkEraseAt(key, x, y) {
+  var strokes = getInkStrokes(key);
+  var R = 18;
+  var kept = [];
+  var changed = false;
+  for (var i = 0; i < strokes.length; i++) {
+    var st = strokes[i];
+    var hit = false;
+    var pts = st.pts || [];
+    for (var j = 0; j < pts.length; j++) {
+      var dx = pts[j][0] - x, dy = pts[j][1] - y;
+      if (dx * dx + dy * dy <= R * R) { hit = true; break; }
+    }
+    if (hit) changed = true; else kept.push(st);
+  }
+  if (changed) saveInkStrokes(key, kept);
+  return changed;
+}
+function clearInkEpisode(prefix) {
+  var all = getInkAll();
+  var changed = false;
+  Object.keys(all).forEach(function (k) {
+    if (k === prefix || k.indexOf(prefix + "-") === 0) { delete all[k]; changed = true; }
+  });
+  if (changed) saveJSON(KEY_INK, all);
+  rerenderKeepScroll();
+}
+function countInkEpisode(prefix) {
+  var all = getInkAll();
+  var n = 0;
+  Object.keys(all).forEach(function (k) {
+    if (k === prefix || k.indexOf(prefix + "-") === 0) n += (all[k] || []).length;
+  });
+  return n;
+}
+function inkPos(e, cv) {
+  if (!cv || typeof cv.getBoundingClientRect !== "function") return null;
+  var r = cv.getBoundingClientRect();
+  return { x: (e.clientX || 0) - r.left, y: (e.clientY || 0) - r.top };
+}
+function inkDrawStroke(ctx, st) {
+  var pts = st.pts || [];
+  if (pts.length < 2) return;
+  ctx.strokeStyle = st.color || "#e11d48";
+  ctx.lineWidth = st.width || 2.5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.stroke();
+}
+function inkRedraw(cv) {
+  if (!cv || typeof cv.getContext !== "function") return;
+  var ctx = cv.getContext("2d");
+  if (!ctx) return;
+  var dpr = (typeof window.devicePixelRatio === "number" && window.devicePixelRatio > 0) ? window.devicePixelRatio : 1;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.restore();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var strokes = getInkStrokes(inkKeyOf(cv));
+  for (var i = 0; i < strokes.length; i++) inkDrawStroke(ctx, strokes[i]);
+}
+function setupInkCanvas() {
+  if (typeof document.querySelectorAll !== "function") return;
+  var list = document.querySelectorAll(".ink-canvas");
+  for (var i = 0; i < list.length; i++) {
+    var cv = list[i];
+    var wrap = cv.parentNode;
+    if (!wrap) continue;
+    var pe = (penMode === "handwrite" || penMode === "ink-eraser") ? "auto" : "none";
+    if (cv.style) cv.style.pointerEvents = pe;
+    if (typeof cv.getContext !== "function") continue;
+    var w = wrap.clientWidth || 0, h = wrap.clientHeight || 0;
+    if (!w || !h) continue;
+    var dpr = (typeof window.devicePixelRatio === "number" && window.devicePixelRatio > 0) ? window.devicePixelRatio : 1;
+    var W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    inkRedraw(cv);
+  }
+}
+var inkDrawing = null; /* {key, color, width, pts, cv} */
+var inkErasing = false;
+var inkEraseCv = null;
+function inkPointerDown(e) {
+  if (penMode !== "handwrite" && penMode !== "ink-eraser") return;
+  var cv = (e && (e.currentTarget || e.target)) || null;
+  if (!cv) return;
+  if (e.preventDefault) e.preventDefault();
+  var pos = inkPos(e, cv);
+  if (!pos) return;
+  var key = inkKeyOf(cv);
+  if (penMode === "ink-eraser") {
+    inkErasing = true;
+    inkEraseCv = cv;
+    if (inkEraseAt(key, pos.x, pos.y)) inkRedraw(cv);
+    return;
+  }
+  inkDrawing = { key: key, color: penColorValue(), width: 2.5, pts: [[pos.x, pos.y]], cv: cv };
+  if (cv.setPointerCapture && e.pointerId !== undefined) { try { cv.setPointerCapture(e.pointerId); } catch (err) {} }
+}
+function inkPointerMove(e) {
+  if (penMode === "ink-eraser" && inkErasing) {
+    var cv2 = inkEraseCv || (e && (e.currentTarget || e.target)) || null;
+    if (!cv2) return;
+    var pos2 = inkPos(e, cv2);
+    if (!pos2) return;
+    if (e.preventDefault) e.preventDefault();
+    if (inkEraseAt(inkKeyOf(cv2), pos2.x, pos2.y)) inkRedraw(cv2);
+    return;
+  }
+  if (!inkDrawing) return;
+  var cv = inkDrawing.cv;
+  var pos = inkPos(e, cv);
+  if (!pos) return;
+  if (e.preventDefault) e.preventDefault();
+  var pts = inkDrawing.pts;
+  var last = pts[pts.length - 1];
+  if (Math.abs(pos.x - last[0]) < 1 && Math.abs(pos.y - last[1]) < 1) return;
+  pts.push([pos.x, pos.y]);
+  if (typeof cv.getContext === "function") {
+    var ctx = cv.getContext("2d");
+    if (ctx) {
+      var dpr = (typeof window.devicePixelRatio === "number" && window.devicePixelRatio > 0) ? window.devicePixelRatio : 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.strokeStyle = inkDrawing.color;
+      ctx.lineWidth = inkDrawing.width;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(last[0], last[1]);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    }
+  }
+}
+function inkPointerUp(e) {
+  if (inkErasing) { inkErasing = false; inkEraseCv = null; return; }
+  if (!inkDrawing) return;
+  var d = inkDrawing;
+  inkDrawing = null;
+  if (d.pts.length >= 2) inkAddStroke(d.key, { color: d.color, width: d.width, pts: d.pts });
+}
+function inkWrapOpen(key) {
+  return '<div class="ink-wrap" data-ink="' + esc(key) + '"><canvas class="ink-canvas" data-ink="' + esc(key) + '" onpointerdown="inkPointerDown(event)" onpointermove="inkPointerMove(event)" onpointerup="inkPointerUp(event)" onpointercancel="inkPointerUp(event)" onpointerleave="inkPointerUp(event)"></canvas>';
+}
+/* 标记笔工具栏：模式 + 颜色 + 手写（三处渲染共用） */
+function penToolbarHTML(markCount, clearFn, edition, episode, inkPrefix) {
+  var html = '<div class="pen-toolbar"><span class="lbl">标记笔：</span>';
+  html += '<button class="' + (penMode === "lookup" ? "active" : "") + '" onclick="setPenMode(\'lookup\')">点词查词</button>';
+  html += '<button class="' + (penMode === "hl" ? "active" : "") + '" onclick="setPenMode(\'hl\')">荧光笔</button>';
+  html += '<button class="' + (penMode === "ul" ? "active" : "") + '" onclick="setPenMode(\'ul\')">下划线笔</button>';
+  html += '<button class="' + (penMode === "eraser" ? "active" : "") + '" onclick="setPenMode(\'eraser\')">橡皮</button>';
+  html += '<button onclick="' + clearFn + '(\'' + edition + "'," + episode + ')" ' + (markCount ? "" : "disabled") + ">清除全部标记（" + markCount + "）</button>";
+  html += '<span class="lbl">颜色：</span>';
+  Object.keys(PEN_COLORS).forEach(function (ck) {
+    var c = PEN_COLORS[ck];
+    html += '<button class="color-dot' + (penColor === ck ? " active" : "") + '" style="background:' + c.ul + '" title="' + c.name + '" onclick="setPenColor(\'' + ck + '\')"></button>';
+  });
+  html += '<span class="lbl">手写：</span>';
+  html += '<button class="' + (penMode === "handwrite" ? "active" : "") + '" onclick="setPenMode(\'handwrite\')">手写笔</button>';
+  html += '<button class="' + (penMode === "ink-eraser" ? "active" : "") + '" onclick="setPenMode(\'ink-eraser\')">手写橡皮</button>';
+  var inkCount = countInkEpisode(inkPrefix);
+  html += '<button onclick="clearInkEpisode(\'' + inkPrefix + '\')" ' + (inkCount ? "" : "disabled") + ">清除手写（" + inkCount + "）</button>";
+  html += "</div>";
+  return html;
 }
 function clearAllMarks(edition, episode) {
   setEpisodeMarks(edition, episode, {});
@@ -1405,17 +1689,11 @@ function renderReadingEpisode() {
   var vname = R_VERSIONS.filter(function (v) { return v.id === curRVersion; })[0].name;
   var html = '<button class="btn ghost" onclick="curREpisode=null;rShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
   var markCount = countEpisodeMarks(curRVersion, ep.no);
-  html += '<div class="pen-toolbar"><span class="lbl">标记笔：</span>';
-  html += '<button class="' + (penMode === "lookup" ? "active" : "") + '" onclick="setPenMode(\'lookup\')">点词查词</button>';
-  html += '<button class="' + (penMode === "hl" ? "active" : "") + '" onclick="setPenMode(\'hl\')">荧光笔</button>';
-  html += '<button class="' + (penMode === "ul" ? "active" : "") + '" onclick="setPenMode(\'ul\')">下划线笔</button>';
-  html += '<button class="' + (penMode === "eraser" ? "active" : "") + '" onclick="setPenMode(\'eraser\')">橡皮</button>';
-  html += '<button onclick="clearAllMarks(\'' + curRVersion + "'," + ep.no + ')" ' + (markCount ? "" : "disabled") + ">清除全部标记（" + markCount + "）</button>";
-  html += "</div>";
+  html += penToolbarHTML(markCount, "clearAllMarks", curRVersion, ep.no, "r-" + curRVersion + "-" + ep.no);
   html += '<div class="card"><h2>' + esc(vname) + " 第" + ep.no + "期</h2>";
   ep.passages.forEach(function (ps, pi) {
     html += '<h3>第' + (pi + 1) + "篇 · " + esc(ps.title) + "</h3>";
-    html += tappableHTML(ps.text, curRVersion, ep.no, pi);
+    html += inkWrapOpen("r-" + curRVersion + "-" + ep.no + "-" + pi) + tappableHTML(ps.text, curRVersion, ep.no, pi) + "</div>";
     html += "<h3>题目</h3>";
     ps.questions.forEach(function (q, qi) {
       var key = pi + "-" + qi;
@@ -1605,10 +1883,23 @@ function clozePassageHTML(text, edition, episode) {
     var re = /\{\{(\d+)\}\}|[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s{}]+|\s+/g;
     var m;
     var wIdx = 0;
+    var toks = [];
     while ((m = re.exec(para)) !== null) {
       var tok = m[0];
       if (m[1]) {
-        var num = +m[1];
+        toks.push({ t: tok, blank: true, num: +m[1] });
+      } else if (/^[A-Za-z]/.test(tok)) {
+        var key = paraIdx + ":" + wIdx;
+        toks.push({ t: tok, word: true, mk: pmarks[key] || "", w: wIdx });
+        wIdx++;
+      } else {
+        toks.push({ t: tok, word: false });
+      }
+    }
+    for (var i = 0; i < toks.length; i++) {
+      var tk = toks[i];
+      if (tk.blank) {
+        var num = tk.num;
         var bi = num - 26;
         var letter = cFills[String(bi)];
         var cls = "cloze-blank";
@@ -1621,16 +1912,19 @@ function clozePassageHTML(text, edition, episode) {
         }
         var label = letter ? esc(letter) : String(num);
         out += '<button class="' + cls + '" onclick="curClozeBlank=' + bi + ';renderPractice()">' + label + "</button>";
-      } else if (/^[A-Za-z]/.test(tok)) {
-        var key = paraIdx + ":" + wIdx;
-        var mk = pmarks[key] || "";
-        var wcls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
+      } else if (tk.word) {
+        var wcs = markClsStyle(tk.mk);
         var midx = markWordList.length;
-        markWordList.push({ mk: "c", ed: edition, ep: episode, pi: 0, para: paraIdx, w: wIdx });
-        out += '<span class="' + wcls + '" data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMarkCloze(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
-        wIdx++;
+        markWordList.push({ mk: "c", ed: edition, ep: episode, pi: 0, para: paraIdx, w: tk.w });
+        out += '<span class="tap-word' + wcs.cls + '"' + wcs.style + ' data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMarkCloze(\'' + tk.t.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + paraIdx + "," + tk.w + ')">' + esc(tk.t) + "</span>";
       } else {
-        out += esc(tok);
+        var bm = bridgeMarkFor(toks, i);
+        if (bm) {
+          var bcs = markClsStyle(markValue(bm.kind, bm.color));
+          out += '<span class="mark-bridge' + bcs.cls + '"' + bcs.style + '>' + esc(tk.t) + "</span>";
+        } else {
+          out += esc(tk.t);
+        }
       }
     }
     out += "</p>";
@@ -1640,6 +1934,7 @@ function clozePassageHTML(text, edition, episode) {
 function tapWordOrMarkCloze(word, edition, episode, paraIdx, wIdx) {
   if (penMode === "lookup") { suppressMarkClick = false; tapWordCloze(word, edition, episode); return; }
   if (suppressMarkClick) { suppressMarkClick = false; return; }
+  if (penMode === "handwrite" || penMode === "ink-eraser") return;
   var marks = getClozeEpisodeMarks(edition, episode);
   if (!marks["0"]) marks["0"] = {};
   var key = paraIdx + ":" + wIdx;
@@ -1647,8 +1942,9 @@ function tapWordOrMarkCloze(word, edition, episode, paraIdx, wIdx) {
     delete marks["0"][key];
   } else {
     var kind = penMode === "hl" ? "hl" : "ul";
-    if (marks["0"][key] === kind) delete marks["0"][key];
-    else marks["0"][key] = kind;
+    var val = markValue(kind, penColor);
+    if (marks["0"][key] === val) delete marks["0"][key];
+    else marks["0"][key] = val;
   }
   if (Object.keys(marks["0"]).length === 0) delete marks["0"];
   setClozeEpisodeMarks(edition, episode, marks);
@@ -1679,17 +1975,11 @@ function renderClozeEpisode() {
   var vname = clozeVersionName(curCVersion);
   var html = '<button class="btn ghost" onclick="curClozeEpisode=null;cShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
   var markCount = countClozeMarks(curCVersion, ep.no);
-  html += '<div class="pen-toolbar"><span class="lbl">标记笔：</span>';
-  html += '<button class="' + (penMode === "lookup" ? "active" : "") + '" onclick="setPenMode(\'lookup\')">点词查词</button>';
-  html += '<button class="' + (penMode === "hl" ? "active" : "") + '" onclick="setPenMode(\'hl\')">荧光笔</button>';
-  html += '<button class="' + (penMode === "ul" ? "active" : "") + '" onclick="setPenMode(\'ul\')">下划线笔</button>';
-  html += '<button class="' + (penMode === "eraser" ? "active" : "") + '" onclick="setPenMode(\'eraser\')">橡皮</button>';
-  html += '<button onclick="clearAllClozeMarks(\'' + curCVersion + "'," + ep.no + ')" ' + (markCount ? "" : "disabled") + ">清除全部标记（" + markCount + "）</button>";
-  html += "</div>";
+  html += penToolbarHTML(markCount, "clearAllClozeMarks", curCVersion, ep.no, "c-" + curCVersion + "-" + ep.no);
   html += '<div class="card"><h2>' + esc(vname) + " 第" + ep.no + "篇" + (ep.source ? " · " + esc(ep.source) : "") + "</h2>";
   html += "<h3>" + esc(ep.title) + "</h3>";
   html += '<p class="muted">点一个空（26–35），再点下方词库里的词填进去；每个词只能用一次，已用的词点一下可以移到当前选中的空。</p>';
-  html += clozePassageHTML(ep.text, curCVersion, ep.no);
+  html += inkWrapOpen("c-" + curCVersion + "-" + ep.no + "-0") + clozePassageHTML(ep.text, curCVersion, ep.no) + "</div>";
   html += "<h3>词库（A–O）</h3>";
   html += '<div class="bank-grid">';
   (ep.bank || []).forEach(function (w, i) {
@@ -1888,18 +2178,32 @@ function matchingPassageHTML(ep, edition, episode) {
       var re = /[A-Za-z]+(?:'[A-Za-z]+)?|[0-9]+(?:[.,][0-9]+)?|[^A-Za-z0-9\s]+|\s+/g;
       var m;
       var wIdx = 0;
+      var toks = [];
       while ((m = re.exec(para)) !== null) {
         var tok = m[0];
         if (/^[A-Za-z]/.test(tok)) {
           var key = paraIdx + ":" + wIdx;
-          var mk = pmarks[key] || "";
-          var cls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
-          var midx = markWordList.length;
-          markWordList.push({ mk: "m", ed: edition, ep: episode, pi: pi, para: paraIdx, w: wIdx });
-          out += '<span class="' + cls + '" data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMarkMatching(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
+          toks.push({ t: tok, word: true, mk: pmarks[key] || "", w: wIdx });
           wIdx++;
         } else {
-          out += esc(tok);
+          toks.push({ t: tok, word: false });
+        }
+      }
+      for (var i = 0; i < toks.length; i++) {
+        var tk = toks[i];
+        if (tk.word) {
+          var cs = markClsStyle(tk.mk);
+          var midx = markWordList.length;
+          markWordList.push({ mk: "m", ed: edition, ep: episode, pi: pi, para: paraIdx, w: tk.w });
+          out += '<span class="tap-word' + cs.cls + '"' + cs.style + ' data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMarkMatching(\'' + tk.t.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + tk.w + ')">' + esc(tk.t) + "</span>";
+        } else {
+          var bm = bridgeMarkFor(toks, i);
+          if (bm) {
+            var bcs = markClsStyle(markValue(bm.kind, bm.color));
+            out += '<span class="mark-bridge' + bcs.cls + '"' + bcs.style + '>' + esc(tk.t) + "</span>";
+          } else {
+            out += esc(tk.t);
+          }
         }
       }
       out += "</p>";
@@ -1910,6 +2214,7 @@ function matchingPassageHTML(ep, edition, episode) {
 function tapWordOrMarkMatching(word, edition, episode, pi, paraIdx, wIdx) {
   if (penMode === "lookup") { suppressMarkClick = false; tapWordMatching(word, edition, episode); return; }
   if (suppressMarkClick) { suppressMarkClick = false; return; }
+  if (penMode === "handwrite" || penMode === "ink-eraser") return;
   var marks = getMatchingEpisodeMarks(edition, episode);
   var pkey = String(pi);
   if (!marks[pkey]) marks[pkey] = {};
@@ -1918,8 +2223,9 @@ function tapWordOrMarkMatching(word, edition, episode, pi, paraIdx, wIdx) {
     delete marks[pkey][key];
   } else {
     var kind = penMode === "hl" ? "hl" : "ul";
-    if (marks[pkey][key] === kind) delete marks[pkey][key];
-    else marks[pkey][key] = kind;
+    var val = markValue(kind, penColor);
+    if (marks[pkey][key] === val) delete marks[pkey][key];
+    else marks[pkey][key] = val;
   }
   if (Object.keys(marks[pkey]).length === 0) delete marks[pkey];
   setMatchingEpisodeMarks(edition, episode, marks);
@@ -1950,18 +2256,12 @@ function renderMatchingEpisode() {
   var vname = matchingVersionName(curMVersion);
   var html = '<button class="btn ghost" onclick="curMatchingEpisode=null;mShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
   var markCount = countMatchingMarks(curMVersion, ep.no);
-  html += '<div class="pen-toolbar"><span class="lbl">标记笔：</span>';
-  html += '<button class="' + (penMode === "lookup" ? "active" : "") + '" onclick="setPenMode(\'lookup\')">点词查词</button>';
-  html += '<button class="' + (penMode === "hl" ? "active" : "") + '" onclick="setPenMode(\'hl\')">荧光笔</button>';
-  html += '<button class="' + (penMode === "ul" ? "active" : "") + '" onclick="setPenMode(\'ul\')">下划线笔</button>';
-  html += '<button class="' + (penMode === "eraser" ? "active" : "") + '" onclick="setPenMode(\'eraser\')">橡皮</button>';
-  html += '<button onclick="clearAllMatchingMarks(\'' + curMVersion + "'," + ep.no + ')" ' + (markCount ? "" : "disabled") + ">清除全部标记（" + markCount + "）</button>";
-  html += "</div>";
+  html += penToolbarHTML(markCount, "clearAllMatchingMarks", curMVersion, ep.no, "m-" + curMVersion + "-" + ep.no);
   html += '<div class="card"><h2>' + esc(vname) + " 第" + ep.no + "篇" + (ep.source ? " · " + esc(ep.source) : "") + "</h2>";
   html += "<h3>" + esc(ep.title) + "</h3>";
   var lastLabel = (ep.paragraphs || []).length ? ep.paragraphs[ep.paragraphs.length - 1].label : "L";
   html += '<p class="muted">先读文章，再给每句话选一段：点每句后面的下拉框选段号（A–' + esc(lastLabel) + '）。答完点自查看解析。</p>';
-  html += matchingPassageHTML(ep, curMVersion, ep.no);
+  html += inkWrapOpen("m-" + curMVersion + "-" + ep.no + "-0") + matchingPassageHTML(ep, curMVersion, ep.no) + "</div>";
   html += "<h3>匹配题（第 36–45 句）</h3>";
   var labels = (ep.paragraphs || []).map(function (p) { return p.label; });
   (ep.questions || []).forEach(function (q, qi) {
@@ -2299,7 +2599,7 @@ var curPracticeModule = "listening";
 var practiceAnswers = {}; /* qid -> letter */
 var practiceChecked = {}; /* qid -> true */
 
-function renderPractice() {
+function renderPracticeInner() {
   var ms = window.ENG_MODULES || [];
   var html = '<div class="chips">';
   ms.forEach(function (m) {
@@ -2372,6 +2672,10 @@ function renderPractice() {
     html += "</div>";
   });
   $("view-practice").innerHTML = html;
+}
+function renderPractice() {
+  renderPracticeInner();
+  setupInkCanvas();
 }
 function addMistakeFromPractice(mid, qid) {
   var m = moduleById(mid);
