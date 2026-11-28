@@ -620,6 +620,20 @@ function renderDashboard() {
   html += '<div class="card"><h2>总体</h2>';
   html += "<p>总共做了 <b>" + (st.objDone + st.subjDone) + "</b> 道 / 项，其中客观题 " + st.objDone + " 道，翻译 / 写作自查了 " + st.subjDone + " 项。</p>";
   html += "<p>客观题答对 <b>" + st.objCorrect + "</b> 道，总体正确率 <b>" + (st.objDone > 0 ? dashPct(st.objRate) : "还没做") + "</b>。</p></div>";
+  /* 5. 模考成绩（只读 eng-mock-records，不改记录；mockDashStats 在模考段定义） */
+  var ms = mockDashStats();
+  html += '<div class="card"><h2>模考成绩</h2>';
+  if (!ms.count) {
+    html += '<p class="muted">还没有模考记录，考完一套就会出现在这里。</p>';
+  } else {
+    html += "<p>一共考过 <b>" + ms.count + "</b> 套" + (ms.best ? "，最高分 <b>" + ms.best.total + "</b> / 710 分（" + esc(ms.best.paperLabel || "") + " · " + esc((ms.best.date || "").slice(0, 10)) + "）" : "") + "。</p>";
+    if (ms.latest) {
+      var L = ms.latest;
+      html += "<p>最新一套：" + esc(L.paperLabel || "") + " · " + esc((L.date || "").slice(0, 10)) + "，总分 <b>" + (L.total == null ? "—" : L.total) + "</b> / 710 分（听力 " + L.listening + " / 248.5 · 阅读 " + L.reading + " / 248.5 · 写作 " + (L.writing == null ? "待自查" : L.writing + " / 106.5") + " · 翻译 " + (L.translation == null ? "待自查" : L.translation + " / 106.5") + "）。</p>";
+    }
+    html += '<p><button class="btn ghost small" onclick="switchTab(\'mock\')">去模考页看全部记录</button></p>';
+  }
+  html += "</div>";
   $("view-dashboard").innerHTML = html;
 }
 
@@ -812,12 +826,71 @@ function mockSelPaperSet(n) {
   mockSelSet = Math.max(1, Math.min(MOCK_PAPER_TYPES[mockSelType].sets, n | 0 || 1));
   renderMock();
 }
-var mock = null; /* 当前模考状态（只在内存里，中途刷新页面会丢失本次进度） */
+var mock = null; /* 当前模考状态（内存里一份，localStorage 里另存一份断点续做进度，刷新后能续做） */
 var mockTimer = null;
 var mockLpKey = ""; /* 当前加载到播放器的听力段 */
+var KEY_MOCK_PROGRESS = "eng-mock-in-progress"; /* 断点续做：正在做的这一套（只存这一套，交卷后清掉） */
+/* 存正在做的卷子：卷子 + 做到第几部分 + 答案 + 作文/译文草稿 + 已用时间 + 保存时刻（墙钟，用于恢复时扣掉刷新期间过去的时间） */
+function mockSaveProgress() {
+  if (!mock || mock.submitted) return;
+  try {
+    saveJSON(KEY_MOCK_PROGRESS, {
+      paper: mock.paper, sectionIdx: mock.sectionIdx, answers: mock.answers,
+      writingText: mock.writingText, translationText: mock.translationText,
+      elapsed: mock.elapsed, sectionElapsed: mock.sectionElapsed,
+      savedAt: Date.now()
+    });
+  } catch (e) {}
+}
+function mockLoadProgress() { return loadJSON(KEY_MOCK_PROGRESS, null); }
+function mockClearProgress() { try { localStorage.removeItem(KEY_MOCK_PROGRESS); } catch (e) {} }
+/* 放弃本次模考：停表、清内存、清断点进度（“再考一套”和考试页的放弃按钮用它，不直接 mock=null，否则旧进度还会自动续做） */
+function mockDiscardProgress() {
+  mockStopTimer();
+  if (typeof lpStop === "function") lpStop();
+  mock = null;
+  mockClearProgress();
+}
+/* 断点续做：从 eng-mock-in-progress 恢复，倒计时按剩余时间继续（扣掉刷新期间过去的时间） */
+function mockResumeProgress() {
+  var s = mockLoadProgress();
+  if (!s || !s.paper || !s.paper.writing || !s.paper.translation || (s.paper.listening || []).length !== 25 || (s.paper.reading || []).length !== 30) return false;
+  var gap = 0;
+  if (s.savedAt) gap = Math.max(0, Math.floor((Date.now() - s.savedAt) / 1000));
+  mockStopTimer();
+  if (typeof lpStop === "function") lpStop();
+  mock = {
+    paper: s.paper, sectionIdx: s.sectionIdx || 0, answers: s.answers || {},
+    writingText: s.writingText || "", translationText: s.translationText || "",
+    writingScore: null, translationScore: null,
+    elapsed: (s.elapsed || 0) + gap, sectionElapsed: (s.sectionElapsed || 0) + gap,
+    submitted: false, submittedAt: null, scores: null, recordId: null
+  };
+  mockLpKey = "";
+  /* 刷新期间时间照走：总时间到了就自动交卷；某部分时间到了就进下一部分 */
+  if (MOCK_TOTAL_MINUTES * 60 - mock.elapsed <= 0) { mockSubmit(true); return true; }
+  while (mock.sectionIdx < MOCK_SECTIONS.length - 1 && mock.sectionElapsed >= MOCK_SECTIONS[mock.sectionIdx].minutes * 60) {
+    mock.sectionElapsed -= MOCK_SECTIONS[mock.sectionIdx].minutes * 60;
+    mock.sectionIdx++;
+  }
+  if (mock.sectionIdx >= MOCK_SECTIONS.length - 1 && mock.sectionElapsed >= MOCK_SECTIONS[mock.sectionIdx].minutes * 60) { mockSubmit(true); return true; }
+  mockStartTimer();
+  mockSaveProgress();
+  renderMock();
+  return true;
+}
 function mockRound2(x) { return Math.round(x * 100) / 100; }
 function getMockRecords() { return loadJSON(KEY_MOCK, []); }
 function saveMockRecords(list) { saveJSON(KEY_MOCK, list); }
+/* 看板用的模考汇总（只读 eng-mock-records）：考过几套、最新一套、最高分那一套 */
+function mockDashStats() {
+  var recs = getMockRecords();
+  var best = null;
+  recs.forEach(function (r) {
+    if (r.total != null && (!best || r.total > best.total)) best = r;
+  });
+  return { count: recs.length, latest: recs.length ? recs[0] : null, best: best };
+}
 
 /* 有种子的伪随机（默认用时间种子；测试传固定种子可复现） */
 function mockRng(seed) {
@@ -1006,6 +1079,7 @@ function mockStart(type, setNo) {
     scores: null, recordId: null
   };
   mockLpKey = "";
+  mockSaveProgress(); /* 开考就存一份断点，之后每答一题、每换一部分、每 10 秒再存 */
   mockStartTimer();
   renderMock();
 }
@@ -1031,6 +1105,7 @@ function mockTick() {
     else mockSubmit(true);
     return;
   }
+  if (mock.elapsed % 10 === 0) mockSaveProgress(); /* 每 10 秒存一次断点（恢复时按保存时刻扣刷新期间的时间，所以 10 秒间隔不会丢计时） */
   mockRenderTimer();
 }
 function mockRenderTimer() {
@@ -1048,11 +1123,13 @@ function mockGoSection(idx) {
   mock.sectionIdx = idx;
   mock.sectionElapsed = 0;
   if (typeof lpStop === "function") lpStop();
+  mockSaveProgress();
   renderMock();
 }
 function mockSetAnswer(qid, letter) {
   if (!mock || mock.submitted) return;
   mock.answers[qid] = letter;
+  mockSaveProgress(); /* 每答一题实时存一次 */
   renderMock();
 }
 /* 听力播放：把某段录音装进共用的播放器（复用 LP） */
@@ -1087,6 +1164,7 @@ function mockLpLabel() {
 function mockSubmit(auto) {
   if (!mock || mock.submitted) return;
   mockStopTimer();
+  mockClearProgress(); /* 交卷了，正在做的这一套不再需要续做，清掉断点 */
   if (typeof lpStop === "function") lpStop();
   mock.submitted = true;
   mock.submittedAt = new Date().toISOString();
@@ -1188,6 +1266,18 @@ function mockOptQ(qid, no, prompt, options) {
   html += "</div>";
   return html;
 }
+/* 模考点词（行内版，不包 <p>）：点词查词，复用 tapWord + lookupLocal，只查词不记生词（addTo="none"）；供选词填空空位之间的正文和写作题面用 */
+function mockTappableInline(text) {
+  var out = "";
+  String(text || "").split(/([A-Za-z]+(?:'[A-Za-z]+)?)/g).forEach(function (tok) {
+    if (/^[A-Za-z]/.test(tok)) {
+      out += '<span class="tap-word" onclick="tapWord(\'' + tok.replace(/'/g, "\\'") + "','mock',0,'none')\">" + esc(tok) + "</span>";
+    } else {
+      out += esc(tok);
+    }
+  });
+  return out;
+}
 function mockClozeHTML(ep) {
   var html = "";
   String(ep.text || "").split(/(\{\{\d+\}\})/g).forEach(function (part) {
@@ -1204,7 +1294,7 @@ function mockClozeHTML(ep) {
       });
       html += "</select>";
     } else {
-      html += esc(part);
+      html += mockTappableInline(part);
     }
   });
   return html;
@@ -1213,9 +1303,9 @@ function mockWritingHTML() {
   var q = wFind(mock.paper.writing.id);
   if (!q) return '<p class="muted">写作题加载失败。</p>';
   var html = '<p class="muted">' + (q.kind === "real" ? "真题 · " + esc(q.source || "") : "模拟题") + (q.type ? " · " + esc(q.type) : "") + ' · 120–180 词 · 30 分钟</p>';
-  html += "<h3>题目要求</h3><pre class=\"light\">" + esc(q.prompt || "") + "</pre>";
+  html += "<h3>题目要求</h3><pre class=\"light\">" + mockTappableInline(q.prompt || "") + "</pre>";
   html += "<h3>你的作文</h3>";
-  html += '<textarea id="mock-w" oninput="mock.writingText=this.value;var c=document.getElementById(\'mock-w-count\');if(c)c.textContent=wCountWords(this.value)+\' 词\'" placeholder="在这里写你的作文……">' + esc(mock.writingText || "") + "</textarea>";
+  html += '<textarea id="mock-w" oninput="mock.writingText=this.value;mockSaveProgress();var c=document.getElementById(\'mock-w-count\');if(c)c.textContent=wCountWords(this.value)+\' 词\'" placeholder="在这里写你的作文……">' + esc(mock.writingText || "") + "</textarea>";
   html += '<p class="muted">已写 <b id="mock-w-count">' + wCountWords(mock.writingText || "") + ' 词</b>（要求 120–180 词）</p>';
   return html;
 }
@@ -1224,7 +1314,7 @@ function mockTranslationHTML() {
   if (!it) return '<p class="muted">翻译题加载失败。</p>';
   var html = "<h3>中文原文</h3><pre class=\"light\">" + esc(it.chinese || "") + "</pre>";
   html += "<h3>你的译文</h3>";
-  html += '<textarea id="mock-t" oninput="mock.translationText=this.value" placeholder="在这里写你的英文译文……">' + esc(mock.translationText || "") + "</textarea>";
+  html += '<textarea id="mock-t" oninput="mock.translationText=this.value;mockSaveProgress()" placeholder="在这里写你的英文译文……">' + esc(mock.translationText || "") + "</textarea>";
   return html;
 }
 function mockListeningHTML() {
@@ -1285,7 +1375,7 @@ function mockReadingHTML() {
       html += '<p class="muted">' + esc(ep2.title || "") + " · 每句选一段（A–" + esc(lastLabel) + "）。</p>";
       html += '<div class="card">';
       (ep2.paragraphs || []).forEach(function (p) {
-        html += "<p><b>" + esc(p.label) + ".</b> " + esc(p.text || "") + "</p>";
+        html += '<div><b>' + esc(p.label) + ".</b> " + tappableText(p.text || "", mItems[0].ver, mItems[0].epNo, "none") + "</div>";
       });
       html += "</div>";
       mItems.forEach(function (it) {
@@ -1317,7 +1407,7 @@ function mockReadingHTML() {
       var ep3 = readingEpisode(first.ver, first.epNo);
       var p = ep3 && ep3.passages ? ep3.passages[first.pi] : null;
       if (!p) return;
-      html += '<div class="card"><h3>' + esc(p.title || "") + "</h3><p>" + esc(p.text || "") + "</p>";
+      html += '<div class="card"><h3>' + esc(p.title || "") + "</h3>" + tappableText(p.text || "", first.ver, first.epNo, "none");
       group.forEach(function (it) {
         var q = mockReadingQ(it);
         if (!q) return;
@@ -1343,7 +1433,7 @@ function renderMockHome() {
     html += '<option value="' + i + '"' + (mockSelSet === i ? " selected" : "") + '>第 ' + i + ' 套</option>';
   }
   html += '</select></p>';
-  html += '<p class="muted">每套卷子题目固定，换一套题目不同。考试中途刷新页面会丢失本次模考进度；各部分按顺序做，时间到了自动进入下一部分。</p>';
+  html += '<p class="muted">每套卷子题目固定，换一套题目不同。中途刷新页面不会丢：回来会自动接着做，答案和倒计时都在，刷新期间过去的时间也算在考试时间里；不想做了点考试页底下的“放弃本次模考”。各部分按顺序做，时间到了自动进入下一部分。</p>';
   html += '<button class="btn" onclick="mockStart()">开始模考（' + esc(mockPaperLabel(mockSelType, mockSelSet)) + '）</button></div>';
   var recs = getMockRecords();
   if (recs.length) {
@@ -1383,9 +1473,30 @@ function renderMockExam() {
   } else {
     html += '<button class="btn" onclick="mockSubmit(false)">交卷</button> ';
   }
-  html += '<button class="btn ghost" onclick="mockSubmit(false)">提前交卷</button></div>';
+  html += '<button class="btn ghost" onclick="mockSubmit(false)">提前交卷</button> ';
+  html += '<button class="btn danger ghost" onclick="if(confirm(\'确定放弃本次模考吗？已答的题和倒计时都会清掉。\')){mockDiscardProgress();renderMock()}">放弃本次模考</button></div>';
   $("view-mock").innerHTML = html;
   if (typeof lpRenderProgress === "function") lpRenderProgress();
+}
+/* 成绩单里的听力原文（点词查词）：考试时只听不看原文，交卷后在这里看原文、点词查词；复用 tappableText + tapWord，只查词不记生词 */
+function mockListeningScriptsHTML() {
+  var html = '<div class="card"><h2>听力原文（点词查词）</h2><p class="muted">点任意单词弹出单词卡，和练习模块一样。</p>';
+  var seen = {};
+  (mock.paper.listening || []).forEach(function (it) {
+    var k = it.part + "-" + it.ver + "-" + it.epNo;
+    if (seen[k]) return;
+    seen[k] = true;
+    var ep = mockListeningEp(it);
+    var title = it.part === "dialogue" ? ("短对话 · 第 " + it.epNo + " 期") : (ep && ep.title ? ep.title : ("第 " + it.epNo + " 期"));
+    html += "<h3>" + esc(title) + "</h3>";
+    if (it.part === "dialogue") {
+      (ep.items || []).forEach(function (q) { html += tappableText(q.script || "", it.ver, it.epNo, "none"); });
+    } else if (ep) {
+      html += tappableText(ep.script || "", it.ver, it.epNo, "none");
+    }
+  });
+  html += "</div>";
+  return html;
 }
 function renderMockReport() {
   var s = mock.scores;
@@ -1425,6 +1536,7 @@ function renderMockReport() {
   html += '<button class="btn small" onclick="mockSetSelfScore(\'translation\', document.getElementById(\'mock-t-score\').value)">保存翻译自查分</button>';
   if (tScore != null) html += '<p class="done-mark">已保存翻译自查分 ' + tScore + " 分</p>";
   html += "</div>";
+  html += mockListeningScriptsHTML();
   if (s.wrong.length) {
     html += '<div class="card"><h2>错题回顾（' + s.wrong.length + ' 道）</h2><p class="muted">只列答错和没答的题，点开看解析。</p>';
     s.wrong.forEach(function (w) {
@@ -1434,11 +1546,18 @@ function renderMockReport() {
   } else {
     html += '<div class="card"><h2>错题回顾</h2><p class="done-mark">客观题全对，没有错题。</p></div>';
   }
-  html += '<div style="margin-top:12px"><button class="btn" onclick="mock=null;renderMock()">再考一套（重新选卷子）</button> <button class="btn ghost" onclick="switchTab(\'dashboard\')">去看进度看板</button></div>';
+  html += '<div style="margin-top:12px"><button class="btn" onclick="mockDiscardProgress();renderMock()">再考一套（重新选卷子）</button> <button class="btn ghost" onclick="switchTab(\'dashboard\')">去看进度看板</button></div>';
   $("view-mock").innerHTML = html;
 }
 function renderMock() {
-  if (!mock) { renderMockHome(); return; }
+  if (!mock) {
+    /* 没在考，但有上次没做完的卷子：自动续做（回到刷新前的那部分，答案和剩余时间都在） */
+    if (mockLoadProgress()) {
+      if (mockResumeProgress()) return;
+      mockClearProgress(); /* 存坏了就清掉，别一直卡着 */
+    }
+    renderMockHome(); return;
+  }
   if (mock.submitted) { renderMockReport(); return; }
   renderMockExam();
 }
