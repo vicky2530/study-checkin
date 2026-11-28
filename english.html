@@ -555,6 +555,26 @@ var MOCK_W_MATCHING = 7.1;
 var MOCK_W_CAREFUL = 14.2;
 var MOCK_W_WRITING = 106.5;
 var MOCK_W_TRANSLATION = 106.5;
+/* 选卷子：模拟卷 10 套（全模拟题），真题卷 3 套（长篇真题只有 3 篇，套数受限）；每套题目固定，换套不同题 */
+var MOCK_PAPER_TYPES = {
+  mock: { name: "模拟卷", sets: 10, seed: 101 },
+  real: { name: "真题卷", sets: 3, seed: 202 }
+};
+var MOCK_REAL_NOTE = "写作、翻译、选词、长篇为历年真题；听力、仔细阅读为按真题标准编写的训练题";
+var mockSelType = "mock";
+var mockSelSet = 1;
+function mockPaperLabel(type, setNo) {
+  return (type === "real" ? "真题卷" : "模拟卷") + "第 " + setNo + "套";
+}
+function mockSelPaperType(type) {
+  mockSelType = type === "real" ? "real" : "mock";
+  mockSelSet = 1;
+  renderMock();
+}
+function mockSelPaperSet(n) {
+  mockSelSet = Math.max(1, Math.min(MOCK_PAPER_TYPES[mockSelType].sets, n | 0 || 1));
+  renderMock();
+}
 var mock = null; /* 当前模考状态（只在内存里，中途刷新页面会丢失本次进度） */
 var mockTimer = null;
 var mockLpKey = ""; /* 当前加载到播放器的听力段 */
@@ -582,31 +602,25 @@ function mockShuffle(arr, rnd) {
 function mockVersioned(list, ver) {
   return (list || []).map(function (e) { return { ver: ver, ep: e }; });
 }
-/* 从 pool 里挑 epCount 篇，使题数之和正好等于 qTarget；挑不到就返回前 epCount 篇（组卷时按需取前 qTarget 道） */
-function mockPickSum(pool, epCount, qTarget, qOf, rnd) {
-  for (var attempt = 0; attempt < 300; attempt++) {
-    var picked = mockShuffle(pool, rnd).slice(0, epCount);
-    var sum = 0;
-    picked.forEach(function (e) { sum += qOf(e.ep); });
-    if (sum === qTarget) return picked;
+/* 组卷：写作1道，听力25题（短篇新闻3篇7题+短对话4期8题+听力篇章3篇10题），阅读30题（选词1篇10空+长篇1篇10题+仔细2篇10题），翻译1道；type 为 mock/real，setNo 从 1 开始；同一套题目固定，换套不同题（按类型把题库洗牌后按套发牌，套与套之间不重题） */
+function mockBuildPaper(type, setNo) {
+  type = type === "real" ? "real" : "mock";
+  var info = MOCK_PAPER_TYPES[type];
+  setNo = Math.max(1, Math.min(info.sets, setNo | 0 || 1));
+  var rnd = mockRng(info.seed);
+  var paper = { id: "mock-" + type + "-" + setNo + "-" + Date.now().toString(36), paperType: type, paperSet: setNo, createdAt: new Date().toISOString() };
+  function vpool(lists) {
+    var out = [];
+    lists.forEach(function (L) { out = out.concat(mockVersioned(L.list, L.ver)); });
+    return out;
   }
-  return pool.slice(0, epCount);
-}
-/* 组卷：写作1道，听力25题（短篇新闻3篇7题+短对话4期8题+听力篇章3篇10题），阅读30题（选词1篇10空+长篇1篇10题+仔细2篇10题），翻译1道 */
-function mockBuildPaper(seed) {
-  var rnd = mockRng(seed);
-  var paper = { id: "mock-" + Date.now().toString(36) + Math.floor(rnd() * 1e6).toString(36), createdAt: new Date().toISOString() };
-  var wPool = wMock().concat(wReal());
-  paper.writing = wPool.length ? { id: wPool[Math.floor(rnd() * wPool.length)].id } : null;
-  var tPool = (window.ENG_TRANSLATION_REAL || []).map(function (it) { return { tab: "real", id: it.id }; })
-    .concat((window.ENG_TRANSLATION_MOCK || []).map(function (it) { return { tab: "mock", id: it.id }; }));
-  paper.translation = tPool.length ? tPool[Math.floor(rnd() * tPool.length)] : null;
-  var newsPool = mockVersioned(window.ENG_NEWS_BASIC, "basic").concat(mockVersioned(window.ENG_NEWS_ADVANCED, "advanced"), mockVersioned(window.ENG_NEWS_REAL, "real"));
-  var dlgPool = mockVersioned(window.ENG_LISTENING_BASIC, "basic").concat(mockVersioned(window.ENG_LISTENING_ADVANCED, "advanced"), mockVersioned(window.ENG_LISTENING_EXAM, "real"));
-  var pasPool = mockVersioned(window.ENG_PASSAGE_BASIC, "basic").concat(mockVersioned(window.ENG_PASSAGE_ADVANCED, "advanced"), mockVersioned(window.ENG_PASSAGE_REAL, "real"));
+  function byQ(pool, n) {
+    return pool.filter(function (e) { return (e.ep.questions || e.ep.items || []).length === n; });
+  }
   function expandListening(picked, part, startNo, qTarget, qOf) {
     var items = [];
     picked.forEach(function (pe) {
+      if (!pe) return;
       var qs = qOf(pe.ep);
       for (var i = 0; i < qs.length && items.length < qTarget; i++) {
         items.push({ no: startNo + items.length, part: part, ver: pe.ver, epNo: pe.ep.no, qi: i });
@@ -614,19 +628,51 @@ function mockBuildPaper(seed) {
     });
     return items;
   }
+  /* 写作、翻译：模拟卷用模拟题，真题卷用真题 */
+  var wPool = type === "real" ? wReal() : wMock();
+  var wShuf = mockShuffle(wPool, rnd);
+  paper.writing = wShuf.length ? { id: wShuf[setNo - 1].id } : null;
+  var tList = type === "real" ? (window.ENG_TRANSLATION_REAL || []) : (window.ENG_TRANSLATION_MOCK || []);
+  var tPool = tList.map(function (it) { return { tab: type === "real" ? "real" : "mock", id: it.id }; });
+  var tShuf = mockShuffle(tPool, rnd);
+  paper.translation = tShuf.length ? tShuf[setNo - 1] : null;
+  /* 听力池：真题卷的听力没有真题原题，用按真题标准编写的训练题（real 版） */
+  var newsLists, dlgLists, pasLists;
+  if (type === "real") {
+    newsLists = [{ list: window.ENG_NEWS_REAL, ver: "real" }];
+    dlgLists = [{ list: window.ENG_LISTENING_EXAM, ver: "real" }];
+    pasLists = [{ list: window.ENG_PASSAGE_REAL, ver: "real" }];
+  } else {
+    newsLists = [{ list: window.ENG_NEWS_BASIC, ver: "basic" }, { list: window.ENG_NEWS_ADVANCED, ver: "advanced" }];
+    dlgLists = [{ list: window.ENG_LISTENING_BASIC, ver: "basic" }, { list: window.ENG_LISTENING_ADVANCED, ver: "advanced" }];
+    pasLists = [{ list: window.ENG_PASSAGE_BASIC, ver: "basic" }, { list: window.ENG_PASSAGE_ADVANCED, ver: "advanced" }];
+  }
+  var newsPool = vpool(newsLists), dlgPool = vpool(dlgLists), pasPool = vpool(pasLists);
+  var news2 = mockShuffle(byQ(newsPool, 2), rnd), news3 = mockShuffle(byQ(newsPool, 3), rnd);
+  var dlgS = mockShuffle(dlgPool, rnd);
+  var pas3 = mockShuffle(byQ(pasPool, 3), rnd), pas4 = mockShuffle(byQ(pasPool, 4), rnd);
   paper.listening = [];
-  paper.listening = paper.listening.concat(expandListening(mockPickSum(newsPool, 3, 7, function (e) { return (e.questions || []).length; }, rnd), "news", 1, 7, function (e) { return e.questions || []; }));
-  paper.listening = paper.listening.concat(expandListening(mockPickSum(dlgPool, 4, 8, function (e) { return (e.items || []).length; }, rnd), "dialogue", 8, 8, function (e) { return e.items || []; }));
-  paper.listening = paper.listening.concat(expandListening(mockPickSum(pasPool, 3, 10, function (e) { return (e.questions || []).length; }, rnd), "passage", 16, 10, function (e) { return e.questions || []; }));
-  var clozePool = mockVersioned(window.ENG_CLOZE_BASIC, "basic").concat(mockVersioned(window.ENG_CLOZE_ADVANCED, "advanced"), mockVersioned(window.ENG_CLOZE_REAL, "real"));
-  var matchPool = mockVersioned(window.ENG_MATCHING_BASIC, "basic").concat(mockVersioned(window.ENG_MATCHING_ADVANCED, "advanced"), mockVersioned(window.ENG_MATCHING_REAL, "real"));
-  var readPool = mockVersioned(window.ENG_READING_BASIC, "basic").concat(mockVersioned(window.ENG_READING_ADVANCED, "advanced"), mockVersioned(window.ENG_READING_EXAM, "real"));
+  paper.listening = paper.listening.concat(expandListening([news2[2 * (setNo - 1)], news2[2 * (setNo - 1) + 1], news3[setNo - 1]], "news", 1, 7, function (e) { return e.questions || []; }));
+  paper.listening = paper.listening.concat(expandListening([dlgS[4 * (setNo - 1)], dlgS[4 * (setNo - 1) + 1], dlgS[4 * (setNo - 1) + 2], dlgS[4 * (setNo - 1) + 3]], "dialogue", 8, 8, function (e) { return e.items || []; }));
+  paper.listening = paper.listening.concat(expandListening([pas3[2 * (setNo - 1)], pas3[2 * (setNo - 1) + 1], pas4[setNo - 1]], "passage", 16, 10, function (e) { return e.questions || []; }));
+  /* 阅读池：真题卷的选词、长篇用真题，仔细阅读没有真题原题，用按真题标准编写的训练题（real 版） */
+  var clozeLists, matchLists, readLists;
+  if (type === "real") {
+    clozeLists = [{ list: window.ENG_CLOZE_REAL, ver: "real" }];
+    matchLists = [{ list: window.ENG_MATCHING_REAL, ver: "real" }];
+    readLists = [{ list: window.ENG_READING_EXAM, ver: "real" }];
+  } else {
+    clozeLists = [{ list: window.ENG_CLOZE_BASIC, ver: "basic" }, { list: window.ENG_CLOZE_ADVANCED, ver: "advanced" }];
+    matchLists = [{ list: window.ENG_MATCHING_BASIC, ver: "basic" }, { list: window.ENG_MATCHING_ADVANCED, ver: "advanced" }];
+    readLists = [{ list: window.ENG_READING_BASIC, ver: "basic" }, { list: window.ENG_READING_ADVANCED, ver: "advanced" }];
+  }
+  var clozePool = vpool(clozeLists), matchPool = vpool(matchLists), readPool = vpool(readLists);
   paper.reading = [];
-  var cz = mockShuffle(clozePool, rnd)[0];
+  var cz = mockShuffle(clozePool, rnd)[setNo - 1];
   if (cz) { for (var bi = 0; bi < 10; bi++) paper.reading.push({ no: 26 + bi, part: "cloze", ver: cz.ver, epNo: cz.ep.no, bi: bi }); }
-  var mt = mockShuffle(matchPool, rnd)[0];
+  var mt = mockShuffle(matchPool, rnd)[setNo - 1];
   if (mt) { for (var mi = 0; mi < 10; mi++) paper.reading.push({ no: 36 + mi, part: "matching", ver: mt.ver, epNo: mt.ep.no, qi: mi }); }
-  var rd = mockShuffle(readPool, rnd)[0];
+  var rd = mockShuffle(readPool, rnd)[setNo - 1];
   if (rd) {
     var no = 46;
     (rd.ep.passages || []).forEach(function (p, pi) {
@@ -705,8 +751,10 @@ function mockFmt(sec) {
   function p(n) { return (n < 10 ? "0" : "") + n; }
   return h > 0 ? h + ":" + p(m) + ":" + p(s) : p(m) + ":" + p(s);
 }
-function mockStart(seed) {
-  var paper = mockBuildPaper(seed);
+function mockStart(type, setNo) {
+  type = type || mockSelType;
+  setNo = setNo || mockSelSet;
+  var paper = mockBuildPaper(type, setNo);
   if (!paper || !paper.writing || !paper.translation || paper.listening.length !== 25 || paper.reading.length !== 30) {
     alert("题库数据不足，组卷失败。");
     return;
@@ -837,6 +885,9 @@ function mockSaveRecord() {
   var s = mock.scores;
   var rec = {
     id: mock.paper.id,
+    paperType: mock.paper.paperType,
+    paperSet: mock.paper.paperSet,
+    paperLabel: mockPaperLabel(mock.paper.paperType, mock.paper.paperSet),
     date: mock.submittedAt,
     auto: !!s.auto,
     listening: s.listening.score,
@@ -1042,13 +1093,28 @@ function mockReadingHTML() {
 }
 function renderMockHome() {
   var html = '<div class="card"><h2>整套模考</h2><p class="muted">按四级真题顺序和时间：写作 30 分钟 → 听力 25 分钟 → 阅读 40 分钟 → 翻译 30 分钟，共约 125 分钟。听力和阅读客观题自动判分，写作和翻译对照范文自查打分。总分 710 分（写作 15% · 听力 35% · 阅读 35% · 翻译 15%）。</p>';
-  html += '<p class="muted">每套卷从现有题库里随机抽题，每次开考换一套。考试中途刷新页面会丢失本次模考进度；各部分按顺序做，时间到了自动进入下一部分。</p>';
-  html += '<button class="btn" onclick="mockStart()">开始模考</button></div>';
+  html += '<h3>选卷子</h3>';
+  html += '<p>类型：';
+  html += '<button class="btn' + (mockSelType === "mock" ? "" : " ghost") + '" onclick="mockSelPaperType(\'mock\')">模拟卷（10 套）</button> ';
+  html += '<button class="btn' + (mockSelType === "real" ? "" : " ghost") + '" onclick="mockSelPaperType(\'real\')">真题卷（3 套）</button></p>';
+  if (mockSelType === "real") {
+    html += '<p class="muted">' + esc(MOCK_REAL_NOTE) + '</p>';
+  }
+  html += '<p>第几套：<select id="mock-set-sel" onchange="mockSelPaperSet(+this.value)">';
+  var sets = MOCK_PAPER_TYPES[mockSelType].sets;
+  for (var i = 1; i <= sets; i++) {
+    html += '<option value="' + i + '"' + (mockSelSet === i ? " selected" : "") + '>第 ' + i + ' 套</option>';
+  }
+  html += '</select></p>';
+  html += '<p class="muted">每套卷子题目固定，换一套题目不同。考试中途刷新页面会丢失本次模考进度；各部分按顺序做，时间到了自动进入下一部分。</p>';
+  html += '<button class="btn" onclick="mockStart()">开始模考（' + esc(mockPaperLabel(mockSelType, mockSelSet)) + '）</button></div>';
   var recs = getMockRecords();
   if (recs.length) {
-    html += '<div class="card"><h2>模考记录（' + recs.length + ' 次）</h2><table class="dash-table"><thead><tr><th>日期</th><th>总分</th><th>听力</th><th>阅读</th><th>写作</th><th>翻译</th></tr></thead><tbody>';
+    html += '<div class="card"><h2>模考记录（' + recs.length + ' 次）</h2><table class="dash-table"><thead><tr><th>日期</th><th>卷子</th><th>总分</th><th>听力</th><th>阅读</th><th>写作</th><th>翻译</th></tr></thead><tbody>';
     recs.forEach(function (r) {
+      var pl = r.paperLabel || (r.paperType ? mockPaperLabel(r.paperType, r.paperSet || 1) : "—");
       html += "<tr><td>" + esc((r.date || "").slice(0, 10)) + (r.auto ? "（自动交卷）" : "") + "</td>";
+      html += "<td>" + esc(pl) + "</td>";
       html += '<td class="num">' + (r.total == null ? "—" : r.total) + " / 710</td>";
       html += '<td class="num">' + r.listening + " / 248.5</td>";
       html += '<td class="num">' + r.reading + " / 248.5</td>";
@@ -1064,6 +1130,10 @@ function renderMockHome() {
 function renderMockExam() {
   var sec = MOCK_SECTIONS[mock.sectionIdx];
   var html = mockTimerHTML();
+  html += '<p class="muted">' + esc(mockPaperLabel(mock.paper.paperType, mock.paper.paperSet)) + '</p>';
+  if (mock.paper.paperType === "real") {
+    html += '<p class="muted">' + esc(MOCK_REAL_NOTE) + '</p>';
+  }
   html += '<div class="card"><h2>第 ' + (mock.sectionIdx + 1) + " 部分 · " + esc(sec.name) + " · " + sec.minutes + ' 分钟</h2>';
   if (sec.id === "writing") html += mockWritingHTML();
   else if (sec.id === "listening") html += mockListeningHTML();
@@ -1086,7 +1156,7 @@ function renderMockReport() {
   var objTotal = mockRound2(s.listening.score + s.reading.score);
   var total = mockRound2(objTotal + (wScore || 0) + (tScore || 0));
   var html = '<div class="card"><h2>模考成绩单</h2>';
-  html += '<p class="muted">' + esc(mock.paper.id) + " · " + esc((mock.submittedAt || "").slice(0, 10)) + (s.auto ? " · 时间到自动交卷" : " · 提前交卷") + "</p>";
+  html += '<p class="muted">' + esc(mockPaperLabel(mock.paper.paperType, mock.paper.paperSet)) + ' · ' + esc(mock.paper.id) + " · " + esc((mock.submittedAt || "").slice(0, 10)) + (s.auto ? " · 时间到自动交卷" : " · 提前交卷") + "</p>";
   html += '<p><span class="score-big">' + total + '</span><span class="muted"> / 710 分' + ((wScore == null || tScore == null) ? "（写作 / 翻译未自查打分，只计客观题）" : "") + "</span></p>";
   html += '<p class="muted">客观题合计 ' + objTotal + ' / 497 分（听力 248.5 + 阅读 248.5）。四级 425 分过线。</p></div>';
   html += '<div class="card"><h2>各部分分数</h2><table class="dash-table"><thead><tr><th>部分</th><th>得分</th><th>答对</th><th>满分</th></tr></thead><tbody>';
@@ -1127,7 +1197,7 @@ function renderMockReport() {
   } else {
     html += '<div class="card"><h2>错题回顾</h2><p class="done-mark">客观题全对，没有错题。</p></div>';
   }
-  html += '<div style="margin-top:12px"><button class="btn" onclick="mockStart()">再考一套</button> <button class="btn ghost" onclick="switchTab(\'dashboard\')">去看进度看板</button></div>';
+  html += '<div style="margin-top:12px"><button class="btn" onclick="mock=null;renderMock()">再考一套（重新选卷子）</button> <button class="btn ghost" onclick="switchTab(\'dashboard\')">去看进度看板</button></div>';
   $("view-mock").innerHTML = html;
 }
 function renderMock() {
