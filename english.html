@@ -185,6 +185,7 @@
 <nav class="tabs">
   <button id="tab-learn" class="active" onclick="switchTab('learn')">知识点</button>
   <button id="tab-words" onclick="switchTab('words')">单词</button>
+  <button id="tab-vocab" onclick="switchTab('vocab')">生词板</button>
   <button id="tab-practice" onclick="switchTab('practice')">练习题库</button>
   <button id="tab-dashboard" onclick="switchTab('dashboard')">进度看板</button>
   <button id="tab-mock" onclick="switchTab('mock')">整套模考</button>
@@ -194,6 +195,7 @@
 <main>
   <section id="view-learn"></section>
   <section id="view-words" style="display:none"></section>
+  <section id="view-vocab" style="display:none"></section>
   <section id="view-practice" style="display:none"></section>
   <section id="view-dashboard" style="display:none"></section>
   <section id="view-mock" style="display:none"></section>
@@ -619,6 +621,159 @@ function renderDashboard() {
   html += "<p>总共做了 <b>" + (st.objDone + st.subjDone) + "</b> 道 / 项，其中客观题 " + st.objDone + " 道，翻译 / 写作自查了 " + st.subjDone + " 项。</p>";
   html += "<p>客观题答对 <b>" + st.objCorrect + "</b> 道，总体正确率 <b>" + (st.objDone > 0 ? dashPct(st.objRate) : "还没做") + "</b>。</p></div>";
   $("view-dashboard").innerHTML = html;
+}
+
+/* ============ 生词板（统一复习生词；只读已有 4 个生词 key，不新增 key） ============ */
+/* 数据来源（没有统一的生词 key，生词板每次打开现算汇总）：
+   - eng-listening-words：听力生词（短对话 basic/advanced/exam；短篇新闻 news-basic/news-advanced/news-real；听力篇章 passage-basic/passage-advanced/passage-real）
+   - eng-reading-words：仔细阅读生词
+   - eng-cloze-words：选词填空生词
+   - eng-matching-words：长篇匹配生词
+   每项都是 {id, edition, episode, word, pos, meaning, mastered, createdAt}。
+   翻译和写作没有用户记词的 key：翻译的生词是题目数据自带的 it.words，写作范文点词只能查词（addTo="none"），
+   所以这两块没有用户自己记下的生词，不进生词板，页面里会写明。 */
+var VB_MODULES = [
+  { id: "listening", name: "听力", key: KEY_LWORDS },
+  { id: "reading", name: "仔细阅读", key: KEY_RWORDS },
+  { id: "cloze", name: "选词填空", key: KEY_CWORDS },
+  { id: "matching", name: "长篇匹配", key: KEY_MWORDS }
+];
+var curVBFilter = "all"; /* all 全部 | listening 听力 | reading 仔细阅读 | cloze 选词填空 | matching 长篇匹配 */
+var curVBShow = "todo"; /* todo 只看未掌握 | all 全部 */
+var vbDictState = {}; /* 生词默写状态（只留当前页，刷新清空）：{小写单词: {status:'ok'|'wrong', input}} */
+function vocabVersionName(list, id) {
+  for (var i = 0; i < list.length; i++) { if (list[i].id === id) return list[i].name; }
+  return id;
+}
+function vocabSourceLabel(module, edition, episode) {
+  var ed = String(edition || "");
+  if (module === "listening") {
+    if (ed.indexOf("news-") === 0) return "听力短篇新闻 · " + vocabVersionName(N_VERSIONS, ed.slice(5)) + " 第" + episode + "期";
+    if (ed.indexOf("passage-") === 0) return "听力篇章 · " + vocabVersionName(P_VERSIONS, ed.slice(8)) + " 第" + episode + "期";
+    return "听力短对话 · " + vocabVersionName(L_VERSIONS, ed) + " 第" + episode + "期";
+  }
+  if (module === "reading") return "仔细阅读 · " + vocabVersionName(R_VERSIONS, ed) + " 第" + episode + "期";
+  if (module === "cloze") return "选词填空 · " + vocabVersionName(C_VERSIONS, ed) + " 第" + episode + "篇";
+  return "长篇匹配 · " + vocabVersionName(M_VERSIONS, ed) + " 第" + episode + "篇";
+}
+function vocabBoardData() {
+  var groups = {};
+  var order = [];
+  VB_MODULES.forEach(function (m) {
+    var list = loadJSON(m.key, []);
+    list.forEach(function (x) {
+      var k = String(x.word || "").toLowerCase();
+      if (!k) return;
+      if (!groups[k]) {
+        groups[k] = { key: k, word: x.word, pos: x.pos || "", meaning: x.meaning || "", mastered: true, count: 0, sources: [], modules: {} };
+        order.push(k);
+      }
+      var g = groups[k];
+      if (!g.pos && x.pos) g.pos = x.pos;
+      if (!g.meaning && x.meaning) g.meaning = x.meaning;
+      if (!x.mastered) g.mastered = false;
+      g.count++;
+      g.modules[m.id] = true;
+      var label = vocabSourceLabel(m.id, x.edition, x.episode);
+      var found = null;
+      for (var i = 0; i < g.sources.length; i++) { if (g.sources[i].label === label) found = g.sources[i]; }
+      if (found) found.n++;
+      else g.sources.push({ module: m.id, label: label, n: 1 });
+    });
+  });
+  var arr = order.map(function (k) { return groups[k]; });
+  var todo = 0;
+  arr.forEach(function (g) { if (!g.mastered) todo++; });
+  return { groups: arr, total: arr.length, todo: todo };
+}
+function setVocabWordMastered(wordKey, mastered) {
+  VB_MODULES.forEach(function (m) {
+    var list = loadJSON(m.key, []);
+    var changed = false;
+    list.forEach(function (x) {
+      if (String(x.word || "").toLowerCase() === wordKey && x.mastered !== mastered) { x.mastered = mastered; changed = true; }
+    });
+    if (changed) saveJSON(m.key, list);
+  });
+}
+function deleteVocabWord(wordKey) {
+  VB_MODULES.forEach(function (m) {
+    var list = loadJSON(m.key, []);
+    var next = list.filter(function (x) { return String(x.word || "").toLowerCase() !== wordKey; });
+    if (next.length !== list.length) saveJSON(m.key, next);
+  });
+}
+function vbWordCheck(wordKey) {
+  var d = vocabBoardData();
+  var g = null;
+  for (var i = 0; i < d.groups.length; i++) { if (d.groups[i].key === wordKey) g = d.groups[i]; }
+  if (!g) return;
+  var inp = $("vbd-" + wordKey);
+  var v = inp ? inp.value.trim() : "";
+  var ok = v.toLowerCase() === wordKey;
+  vbDictState[wordKey] = { status: ok ? "ok" : "wrong", input: v };
+  if (ok) { setVocabWordMastered(wordKey, true); delete vbDictState[wordKey]; }
+  renderVocabBoard();
+}
+function vbWordSkip(wordKey) {
+  vbDictState[wordKey] = { status: "wrong", input: "" };
+  renderVocabBoard();
+}
+function renderVocabBoard() {
+  var d = vocabBoardData();
+  var html = '<div class="card"><h2>生词板</h2>';
+  html += '<p class="muted">你自己记下的生词都汇总在这里，来自听力、仔细阅读、选词填空、长篇匹配。重复的词只出现一次，会告诉你它出现过几次、都在哪。</p>';
+  html += '<p>共 <b>' + d.total + '</b> 个生词，其中 <b>' + d.todo + '</b> 个未掌握</p>';
+  html += '<div class="chips">';
+  html += '<button class="' + (curVBFilter === "all" ? "active" : "") + '" onclick="curVBFilter=\'all\';renderVocabBoard()">全部</button>';
+  VB_MODULES.forEach(function (m) {
+    var n = 0;
+    d.groups.forEach(function (g) { if (g.modules[m.id]) n++; });
+    html += '<button class="' + (curVBFilter === m.id ? "active" : "") + '" onclick="curVBFilter=\'' + m.id + '\';renderVocabBoard()">' + esc(m.name) + '（' + n + '）</button>';
+  });
+  html += '</div>';
+  html += '<div class="chips">';
+  html += '<button class="' + (curVBShow === "todo" ? "active" : "") + '" onclick="curVBShow=\'todo\';renderVocabBoard()">只看未掌握</button>';
+  html += '<button class="' + (curVBShow === "all" ? "active" : "") + '" onclick="curVBShow=\'all\';renderVocabBoard()">全部都看</button>';
+  html += '</div>';
+  html += '<p class="muted">翻译和写作的生词不在这里：翻译的生词是题目自带的汇总，写作范文点词只能查词，这两块没有“记入生词”的功能。</p>';
+  if (!d.total) {
+    html += '<p class="muted">还没有记生词。去听力、仔细阅读、选词填空、长篇匹配里点单词，点“记入本期生词”，就会汇总到这里。</p></div>';
+    $("view-vocab").innerHTML = html;
+    return;
+  }
+  var list = d.groups.filter(function (g) {
+    if (curVBShow === "todo" && g.mastered) return false;
+    if (curVBFilter !== "all" && !g.modules[curVBFilter]) return false;
+    return true;
+  });
+  if (!list.length) {
+    html += '<p class="muted">这个筛选下没有生词。</p></div>';
+    $("view-vocab").innerHTML = html;
+    return;
+  }
+  html += '<p class="muted">只给词性和中文，写出英文；默对了自动标掌握，默错了会告诉你正确答案。每个词都能听读音、看例句。</p>';
+  list.forEach(function (g) {
+    var hit = lookupLocal(g.word);
+    var st = vbDictState[g.key];
+    html += '<div class="dict-row"><div class="q"><b>' + esc(g.word) + '</b> ' + (hit && hit.phon ? '<span class="muted">' + esc(hit.phon) + '</span> ' : '') + '<span style="color:var(--accent)">' + esc(g.pos || "") + '</span> ' + esc(g.meaning || "") + (g.mastered ? ' <span class="done-mark">已掌握</span>' : '') + ' <span class="badge src">出现 ' + g.count + ' 次</span></div>';
+    html += '<div class="muted">来源：' + g.sources.map(function (s) { return esc(s.label) + (s.n > 1 ? " ×" + s.n : ""); }).join("；") + '</div>';
+    if (hit && hit.examples && hit.examples.length) {
+      html += '<p class="muted">' + esc(hit.examples[0].en || "") + (hit.examples[0].zh ? '<br>' + esc(hit.examples[0].zh) : '') + '</p>';
+    }
+    html += '<input type="text" id="vbd-' + g.key + '" placeholder="默写：写出英文单词" value="' + esc(st ? st.input || "" : "") + '">';
+    html += ' <button class="btn small" onclick="vbWordCheck(\'' + g.key + '\')">检查</button> ';
+    html += '<button class="btn ghost small" onclick="vbWordSkip(\'' + g.key + '\')">不会</button> ';
+    html += '<button class="btn ghost small" onclick="speakWordTwice(\'' + esc(g.word).replace(/'/g, "\\'") + '\')">读音</button> ';
+    html += '<button class="btn ghost small" onclick="setVocabWordMastered(\'' + g.key + '\',' + (!g.mastered) + ');renderVocabBoard()">' + (g.mastered ? '取消已掌握' : '标为已掌握') + '</button>';
+    html += '<button class="btn danger small" onclick="deleteVocabWord(\'' + g.key + '\');renderVocabBoard()">删除</button>';
+    if (st && st.status === "wrong") {
+      html += '<div class="res no">正确答案：' + esc(g.word) + '（你写的是：' + esc(st.input || "空") + '）</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  $("view-vocab").innerHTML = html;
 }
 
 /* ============ 整套模考（写作30′→听力25′→阅读40′→翻译30′，共约125分钟；只用已有题库拼卷，不新编题） ============ */
@@ -1462,7 +1617,7 @@ function countMatchingMarks(edition, episode) {
 }
 
 /* ============ 页签切换 ============ */
-var TABS = ["learn", "words", "practice", "dashboard", "mock", "mistakes", "prompt"];
+var TABS = ["learn", "words", "vocab", "practice", "dashboard", "mock", "mistakes", "prompt"];
 function switchTab(t) {
   TABS.forEach(function (x) {
     $("tab-" + x).classList.toggle("active", x === t);
@@ -1471,6 +1626,7 @@ function switchTab(t) {
   stopSpeak();
   if (t === "learn") renderLearn();
   if (t === "words") renderWords();
+  if (t === "vocab") renderVocabBoard();
   if (t === "practice") renderPractice();
   if (t === "dashboard") renderDashboard();
   if (t === "mock") renderMock();
