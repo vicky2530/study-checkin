@@ -93,6 +93,13 @@
   .modal { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 640px; }
   .modal h2 { font-size: 18px; margin-bottom: 10px; }
   .stat { display: inline-block; background: var(--primary-light); color: var(--primary-dark); border-radius: 8px; padding: 6px 12px; font-size: 13px; margin: 0 6px 8px 0; }
+  .prog { height: 10px; background: var(--primary-light); border-radius: 6px; overflow: hidden; margin-top: 6px; }
+  .prog > i { display: block; height: 100%; background: linear-gradient(90deg, #5b6abf, #7c6bb0); border-radius: 6px; }
+  .big-num { font-size: 30px; font-weight: bold; color: var(--primary-dark); }
+  .dash-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .dash-table th, .dash-table td { border-bottom: 1px solid var(--border); padding: 8px 6px; text-align: left; vertical-align: middle; }
+  .dash-table th { color: var(--muted); font-size: 13px; }
+  .dash-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .word-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .word-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #fff; }
   .word-card .w { font-size: 17px; font-weight: bold; color: var(--primary-dark); }
@@ -171,6 +178,7 @@
   <button id="tab-learn" class="active" onclick="switchTab('learn')">知识点</button>
   <button id="tab-words" onclick="switchTab('words')">单词</button>
   <button id="tab-practice" onclick="switchTab('practice')">练习题库</button>
+  <button id="tab-dashboard" onclick="switchTab('dashboard')">进度看板</button>
   <button id="tab-mistakes" onclick="switchTab('mistakes')">错题库 <span id="mis-count"></span></button>
   <button id="tab-prompt" onclick="switchTab('prompt')">提示词</button>
 </nav>
@@ -178,6 +186,7 @@
   <section id="view-learn"></section>
   <section id="view-words" style="display:none"></section>
   <section id="view-practice" style="display:none"></section>
+  <section id="view-dashboard" style="display:none"></section>
   <section id="view-mistakes" style="display:none"></section>
   <section id="view-prompt" style="display:none"></section>
 </main>
@@ -210,6 +219,7 @@ var KEY_MWORDS = "eng-matching-words";
 var KEY_MMARKS = "eng-matching-marks";
 var KEY_INK = "eng-ink"; /* 手写笔迹：{篇章 key: [{color,width,pts:[[x,y],...]}]} */
 var KEY_PEN_COLOR = "eng-pen-color"; /* 当前标记颜色 */
+var KEY_ATTEMPTS = "eng-attempts"; /* 做题记录（新增，只供进度看板统计）：[{module, qid, correct: true|false|null, ts}] */
 
 /* 标记颜色：默认 + 蓝/红/绿/橙/紫；hl 是荧光背景色，ul 是下划线颜色 */
 var PEN_COLORS = {
@@ -401,6 +411,124 @@ function deleteWrongWord(id) {
   saveJSON(KEY_WRONG, getWrongWords().filter(function (x) { return x.id !== id; }));
 }
 
+/* ============ 四级进度看板（只读统计；每次打开重新算；不写已有数据） ============ */
+var DASH_ROWS = [
+  { key: "words", name: "单词", kind: "words" },
+  { key: "listening-dialogue", name: "听力 · 短对话", kind: "obj" },
+  { key: "listening-news", name: "听力 · 短篇新闻", kind: "obj" },
+  { key: "listening-passage", name: "听力 · 听力篇章", kind: "obj" },
+  { key: "reading", name: "阅读 · 仔细阅读", kind: "obj" },
+  { key: "cloze", name: "阅读 · 选词填空", kind: "obj" },
+  { key: "matching", name: "阅读 · 长篇匹配", kind: "obj" },
+  { key: "translation", name: "翻译", kind: "subj" },
+  { key: "writing", name: "写作", kind: "subj" }
+];
+function dashTotals() {
+  function sumList(list, pick) {
+    var n = 0;
+    (list || []).forEach(function (e) { n += (pick(e) || []).length; });
+    return n;
+  }
+  function sumReading(list) {
+    var n = 0;
+    (list || []).forEach(function (e) {
+      (e.passages || []).forEach(function (p) { n += (p.questions || []).length; });
+    });
+    return n;
+  }
+  return {
+    words: (window.ENG_WORD_DAYS || []).reduce(function (n, d) { return n + (d.words || []).length; }, 0),
+    "listening-dialogue": sumList((window.ENG_LISTENING_BASIC || []).concat(window.ENG_LISTENING_ADVANCED || [], window.ENG_LISTENING_EXAM || []), function (e) { return e.items; }),
+    "listening-news": sumList((window.ENG_NEWS_BASIC || []).concat(window.ENG_NEWS_ADVANCED || [], window.ENG_NEWS_REAL || []), function (e) { return e.questions; }),
+    "listening-passage": sumList((window.ENG_PASSAGE_BASIC || []).concat(window.ENG_PASSAGE_ADVANCED || [], window.ENG_PASSAGE_REAL || []), function (e) { return e.questions; }),
+    reading: sumReading((window.ENG_READING_BASIC || []).concat(window.ENG_READING_ADVANCED || [], window.ENG_READING_EXAM || [])),
+    cloze: sumList((window.ENG_CLOZE_BASIC || []).concat(window.ENG_CLOZE_ADVANCED || [], window.ENG_CLOZE_REAL || []), function (e) { return e.blanks; }),
+    matching: sumList((window.ENG_MATCHING_BASIC || []).concat(window.ENG_MATCHING_ADVANCED || [], window.ENG_MATCHING_REAL || []), function (e) { return e.questions; }),
+    translation: (window.ENG_TRANSLATION_REAL || []).length + (window.ENG_TRANSLATION_MOCK || []).length,
+    writing: (window.ENG_WRITING_MOCK || []).length + (window.ENG_WRITING_REAL || []).length
+  };
+}
+function dashStats() {
+  var totals = dashTotals();
+  var attempts = getAttempts();
+  var wrong = getWrongWords();
+  var unmastered = 0, wrongMastered = 0;
+  wrong.forEach(function (x) { if (x.mastered) wrongMastered++; else unmastered++; });
+  var wordsTotal = totals.words || 2000;
+  var wordsMastered = Math.max(0, wordsTotal - unmastered);
+  var rows = DASH_ROWS.map(function (r) {
+    var row = { key: r.key, name: r.name, kind: r.kind, total: totals[r.key] || 0, done: 0, correct: 0 };
+    if (r.kind === "words") {
+      row.done = wordsMastered; row.correct = wordsMastered;
+      row.rate = row.total > 0 ? row.correct / row.total : null; /* 单词行：正确率按掌握率算 */
+    } else {
+      var list = attempts.filter(function (a) { return a.module === r.key; });
+      row.done = list.length;
+      row.correct = list.filter(function (a) { return a.correct === true; }).length;
+      row.rate = row.done > 0 ? row.correct / row.done : null;
+    }
+    row.prog = row.total > 0 ? row.done / row.total : 0;
+    return row;
+  });
+  var obj = rows.filter(function (r) { return r.kind === "obj"; });
+  var objDone = 0, objCorrect = 0, subjDone = 0;
+  obj.forEach(function (r) { objDone += r.done; objCorrect += r.correct; });
+  rows.filter(function (r) { return r.kind === "subj"; }).forEach(function (r) { subjDone += r.done; });
+  /* 最弱：客观题里做过题的，正确率最低；并列看进度少的 */
+  var weak = null;
+  obj.forEach(function (r) {
+    if (r.done <= 0) return;
+    if (!weak || r.rate < weak.rate || (r.rate === weak.rate && r.prog < weak.prog)) weak = r;
+  });
+  return {
+    totals: totals, rows: rows,
+    wordsTotal: wordsTotal, wordsMastered: wordsMastered, wordsLeft: unmastered,
+    wrongTotal: wrong.length, wrongMastered: wrongMastered,
+    objDone: objDone, objCorrect: objCorrect,
+    objRate: objDone > 0 ? objCorrect / objDone : null,
+    subjDone: subjDone, weak: weak
+  };
+}
+function dashPct(x) { return x == null ? "—" : Math.round(x * 100) + "%"; }
+function dashProgBar(frac) {
+  var p = Math.max(0, Math.min(1, frac || 0));
+  return '<div class="prog"><i style="width:' + Math.round(p * 100) + '%"></i></div>';
+}
+function renderDashboard() {
+  var st = dashStats();
+  var html = '<div class="card"><h2>四级进度看板</h2><p class="muted">数字每次打开都重新算，只读你存在浏览器里的数据，不改任何记录。</p></div>';
+  /* 1. 词汇 */
+  html += '<div class="card"><h2>词汇 · 四级核心词</h2>';
+  html += '<p><span class="big-num">' + st.wordsMastered + '</span><span class="muted"> / ' + st.wordsTotal + ' 已掌握</span></p>';
+  html += dashProgBar(st.wordsTotal > 0 ? st.wordsMastered / st.wordsTotal : 0);
+  html += '<p class="muted">还剩 ' + st.wordsLeft + ' 个没掌握（错词库里还没标“已掌握”的词）。错词库共 ' + st.wrongTotal + ' 个，其中已标掌握 ' + st.wrongMastered + ' 个。</p>';
+  html += '<p class="muted">掌握口径：没进错词库的词算掌握；默写进错词库后，标了“已掌握”才算掌握。</p></div>';
+  /* 2. 各模块表 */
+  html += '<div class="card"><h2>各模块进度</h2><table class="dash-table"><thead><tr><th>模块</th><th>做了</th><th>答对</th><th>正确率</th><th>进度</th></tr></thead><tbody>';
+  st.rows.forEach(function (r) {
+    html += "<tr><td>" + esc(r.name) + "</td>";
+    html += '<td class="num">' + r.done + " / " + r.total + "</td>";
+    html += '<td class="num">' + (r.kind === "subj" ? "—" : r.correct) + "</td>";
+    html += '<td class="num">' + (r.kind === "subj" ? "自查" : (r.done > 0 ? dashPct(r.rate) : "还没做")) + "</td>";
+    html += "<td>" + dashProgBar(r.prog) + "</td></tr>";
+  });
+  html += "</tbody></table>";
+  html += '<p class="muted">“做了”按你点过“自查”的题数算（重做同一题只算一次，按最后一次结果）；翻译和写作是自己对照范文自查，没有自动判分，所以不计正确率。单词行按掌握数计。</p></div>';
+  /* 3. 最弱 */
+  html += '<div class="card"><h2>最弱的一块</h2>';
+  if (st.weak) {
+    html += "<p>最弱的是 <b>" + esc(st.weak.name) + "</b>，正确率 " + dashPct(st.weak.rate) + "（做了 " + st.weak.done + " 道，答对 " + st.weak.correct + " 道）。</p>";
+  } else {
+    html += '<p class="muted">还没有做题数据，先做一套练习再来看。</p>';
+  }
+  html += '<p class="muted">按客观题（听力、阅读、选词、长篇）正确率算；正确率相同时看进度少的。</p></div>';
+  /* 4. 总体 */
+  html += '<div class="card"><h2>总体</h2>';
+  html += "<p>总共做了 <b>" + (st.objDone + st.subjDone) + "</b> 道 / 项，其中客观题 " + st.objDone + " 道，翻译 / 写作自查了 " + st.subjDone + " 项。</p>";
+  html += "<p>客观题答对 <b>" + st.objCorrect + "</b> 道，总体正确率 <b>" + (st.objDone > 0 ? dashPct(st.objRate) : "还没做") + "</b>。</p></div>";
+  $("view-dashboard").innerHTML = html;
+}
+
 /* ============ 错题库 ============ */
 function getMistakes() { return loadJSON(KEY_MISTAKES, []); }
 function addMistake(m) {
@@ -427,6 +555,22 @@ function updateMisCount() {
   var n = getMistakes().filter(function (x) { return !x.mastered; }).length;
   var el = $("mis-count");
   if (el) el.textContent = n ? "(" + n + ")" : "";
+}
+
+/* ============ 做题记录（新增：只供进度看板统计；不改任何已有 key，不改已有模块的显示和数据） ============ */
+function getAttempts() { return loadJSON(KEY_ATTEMPTS, []); }
+function recordAttempt(module, qid, correct) {
+  var list = getAttempts();
+  var q = String(qid);
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].module === module && String(list[i].qid) === q) {
+      list[i].correct = correct; list[i].ts = Date.now();
+      saveJSON(KEY_ATTEMPTS, list);
+      return;
+    }
+  }
+  list.push({ module: module, qid: q, correct: correct, ts: Date.now() });
+  saveJSON(KEY_ATTEMPTS, list);
 }
 
 /* ============ 生词汇总（听力 / 阅读） ============ */
@@ -559,7 +703,7 @@ function countMatchingMarks(edition, episode) {
 }
 
 /* ============ 页签切换 ============ */
-var TABS = ["learn", "words", "practice", "mistakes", "prompt"];
+var TABS = ["learn", "words", "practice", "dashboard", "mistakes", "prompt"];
 function switchTab(t) {
   TABS.forEach(function (x) {
     $("tab-" + x).classList.toggle("active", x === t);
@@ -569,6 +713,7 @@ function switchTab(t) {
   if (t === "learn") renderLearn();
   if (t === "words") renderWords();
   if (t === "practice") renderPractice();
+  if (t === "dashboard") renderDashboard();
   if (t === "mistakes") renderMistakes();
   if (t === "prompt") renderPrompt();
 }
@@ -1009,6 +1154,7 @@ function renderListeningEpisode() {
     });
     if (lChecked) {
       var mine = lAnswers[qi] || "未作答";
+      recordAttempt("listening-dialogue", curLVersion + "-" + ep.no + "-" + qi, mine === it.answer);
       html += '<div class="answer-box open"><p><b>听力原文：</b></p>' + tappableText(it.script, curLVersion, ep.no, "listening");
       html += "<p><b>问：</b>" + esc(it.promptZh || "") + "</p>";
       html += "<p><b>答案解析：</b>" + esc(it.analysis || "") + "</p>";
@@ -1056,6 +1202,7 @@ function renderListeningTextEpisode() {
     });
     if (lChecked) {
       var mine = lAnswers[qi] || "未作答";
+      recordAttempt(curLType === "news" ? "listening-news" : "listening-passage", edition + "-" + ep.no + "-" + qi, mine === q.answer);
       html += '<div class="answer-box open"><p><b>听力原文：</b></p>' + tappableText(ep.script, edition, ep.no, "listening");
       html += "<p><b>问：</b>" + esc(q.promptZh || "") + "</p>";
       html += "<p><b>答案解析：</b>" + esc(q.analysis || "") + "</p>";
@@ -1721,6 +1868,7 @@ function renderReadingEpisode() {
         var mine = rAnswers[key] || "未作答";
         total++;
         if (mine === q.answer) right++;
+        recordAttempt("reading", curRVersion + "-" + ep.no + "-" + pi + "-" + qi, mine === q.answer);
         html += "<p><b>第" + (qi + 1) + "题：正确答案为 " + esc(q.answer) + "</b></p><p>" + esc(q.analysis || "") + "</p>";
         html += mine === q.answer ? '<p class="done-mark">你答对了</p>' : '<p style="color:var(--red)">你答错了（你选 ' + esc(mine) + "，正确答案 " + esc(q.answer) + "）</p>";
         if (mine !== q.answer) {
@@ -1998,6 +2146,7 @@ function renderClozeEpisode() {
       var mine = cFills[String(i)] || "未作答";
       total++;
       if (mine === b.answer) right++;
+      recordAttempt("cloze", curCVersion + "-" + ep.no + "-" + i, mine === b.answer);
       var mineWord = "";
       if (mine && "ABCDEFGHIJKLMNO".indexOf(mine) >= 0) mineWord = ep.bank["ABCDEFGHIJKLMNO".indexOf(mine)];
       html += "<p><b>第" + (26 + i) + "空：正确答案为 " + esc(b.answer) + "（" + esc(b.word) + "，" + esc(b.pos || "") + "）</b></p><p>" + esc(b.analysis || "") + "</p>";
@@ -2286,6 +2435,7 @@ function renderMatchingEpisode() {
       var mine = mAnswers[String(qi)] || "未作答";
       total++;
       if (mine === q.answer) right++;
+      recordAttempt("matching", curMVersion + "-" + ep.no + "-" + qi, mine === q.answer);
       html += "<p><b>第" + (q.no || (36 + qi)) + "句：正确答案为 " + esc(q.answer) + " 段</b></p><p>" + esc(q.analysis || "") + "</p>";
       if (mine !== q.answer) {
         html += '<button class="btn ghost small" onclick="addMistakeFromMatching(\'' + curMVersion + "'," + ep.no + "," + qi + ')">加入错题库</button>';
@@ -2450,6 +2600,7 @@ function renderTranslationDetail() {
   html += '<textarea id="tr-my" oninput="trMyDraft=this.value" placeholder="在这里写你的英文译文……">' + esc(trMyDraft) + "</textarea>";
   html += '<div style="margin-top:8px"><button class="btn" onclick="trChecked=true;renderPractice()" ' + (trChecked ? "disabled" : "") + '>自查</button></div>';
   if (trChecked) {
+    recordAttempt("translation", curTrTab + "-" + it.id, null);
     html += '<div class="answer-box open"><h3>参考译文</h3>' + tappableText(it.reference, "translation", 0, "none");
     html += "<h3>逐句解析</h3>";
     (it.sentences || []).forEach(function (s, i) {
@@ -2568,6 +2719,7 @@ function renderWritingDetail() {
   html += '<p class="muted">已写 <b id="w-count">' + wCountWords(wDraft) + ' 词</b>（要求 120–180 词）</p>';
   html += '<div style="margin-top:8px"><button class="btn" onclick="wChecked=true;renderPractice()" ' + (wChecked ? "disabled" : "") + '>自查</button></div>';
   if (wChecked) {
+    recordAttempt("writing", it.id, null);
     html += '<div class="answer-box open"><h3>参考范文' + (isReal ? '（非官方范文）' : '') + '</h3>' + tappableText((it.essay || []).join("\n\n"), "writing", 0, "none");
     html += "<h3>逐句解析</h3>";
     (it.analysis || []).forEach(function (a, i) {
