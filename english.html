@@ -108,6 +108,7 @@
   .tap-word:hover { color: var(--primary); border-bottom-color: var(--primary); }
   .tap-word.mark-hl { background: rgba(255, 233, 110, 0.55); }
   .tap-word.mark-ul { border-bottom: 2px solid var(--primary); }
+  .tap-word.mark-preview { background: rgba(120, 140, 255, 0.35); outline: 1px dashed var(--primary); }
   .cloze-blank { display: inline-block; min-width: 64px; padding: 1px 8px; margin: 0 2px; border: 1px dashed #8a8fb0; border-radius: 6px; background: #f0f1f8; color: var(--primary-dark); font-family: Georgia, "Times New Roman", serif; font-size: 15px; cursor: pointer; vertical-align: baseline; }
   .cloze-blank:hover { border-color: var(--primary); background: var(--primary-light); }
   .cloze-blank.sel { border-style: solid; border-color: var(--primary); background: var(--primary-light); font-weight: bold; }
@@ -256,9 +257,47 @@ function buildDict() {
   }
   return LOCAL_DICT;
 }
+/* 查词时先精确匹配，查不到再还原原形（去复数/三单、去 ed/ing、去 ly 等、不规则动词），再查不到返回 null */
+var IRREG = { am: "be", are: "be", is: "be", was: "be", were: "be", been: "be", being: "be", has: "have", have: "have", had: "have", does: "do", did: "do", done: "do", goes: "go", went: "go", gone: "go", says: "say", said: "say", makes: "make", made: "make", takes: "take", took: "take", taken: "take", comes: "come", came: "come", gives: "give", gave: "give", given: "give", sees: "see", saw: "see", seen: "see", knows: "know", knew: "know", known: "know", gets: "get", got: "get", gotten: "get", thinks: "think", thought: "think", brings: "bring", brought: "bring", buys: "buy", bought: "buy", catches: "catch", caught: "catch", teaches: "teach", taught: "teach", tells: "tell", told: "tell", finds: "find", found: "find", leaves: "leave", left: "leave", feels: "feel", felt: "feel", keeps: "keep", kept: "keep", holds: "hold", held: "hold", writes: "write", wrote: "write", written: "write", reads: "read", speaks: "speak", spoke: "speak", spoken: "speak", drives: "drive", drove: "drive", driven: "drive", eats: "eat", ate: "eat", eaten: "eat", falls: "fall", fell: "fall", fallen: "fall", chooses: "choose", chose: "choose", chosen: "choose", breaks: "break", broke: "break", broken: "break", spends: "spend", spent: "spend", sends: "send", sent: "send", builds: "build", built: "build", lends: "lend", lent: "lend", loses: "lose", lost: "lose", pays: "pay", paid: "pay", meets: "meet", met: "meet", runs: "run", ran: "run", sits: "sit", sat: "sit", stands: "stand", stood: "stand", understands: "understand", understood: "understand", wins: "win", won: "win", begins: "begin", began: "begin", begun: "begin", drinks: "drink", drank: "drink", drunk: "drink", sings: "sing", sang: "sing", sung: "sing", swims: "swim", swam: "swim", swum: "swim" };
+function lemmaCandidates(w) {
+  var out = [];
+  function add(x) { if (x && x.length > 1 && out.indexOf(x) < 0) out.push(x); }
+  if (IRREG[w]) add(IRREG[w]);
+  if (w.slice(-2) === "'s" || w.slice(-1) === "'") add(w.replace(/'s$/, "").replace(/'$/, ""));
+  if (w.slice(-3) === "ies" && w.length > 3) add(w.slice(0, -3) + "y");
+  if (w.slice(-3) === "ied") add(w.slice(0, -3) + "y");
+  if (w.slice(-4) === "sses" || w.slice(-4) === "xes" || w.slice(-4) === "zes" || w.slice(-5) === "ches" || w.slice(-5) === "shes") add(w.slice(0, -2));
+  else if (w.slice(-1) === "s" && w.slice(-2) !== "ss") add(w.slice(0, -1));
+  if (w.slice(-2) === "ed") {
+    var b = w.slice(0, -2);
+    add(b); add(b + "e");
+    if (b.length >= 2 && b.slice(-1) === b.slice(-2, -1)) add(b.slice(0, -1));
+  }
+  if (w.slice(-3) === "ing") {
+    var c = w.slice(0, -3);
+    add(c); add(c + "e");
+    if (c.length >= 2 && c.slice(-1) === c.slice(-2, -1)) add(c.slice(0, -1));
+  }
+  if (w.slice(-2) === "ly") add(w.slice(0, -2));
+  if (w.slice(-2) === "er") add(w.slice(0, -2));
+  if (w.slice(-3) === "est") add(w.slice(0, -3));
+  if (w.slice(-4) === "ness") add(w.slice(0, -4));
+  if (w.slice(-4) === "ment") add(w.slice(0, -4));
+  if (w.slice(-4) === "tion" || w.slice(-4) === "sion") { add(w.slice(0, -3) + "e"); add(w.slice(0, -4)); }
+  if (w.slice(-3) === "ity") add(w.slice(0, -3) + "e");
+  if (w.slice(-5) === "fully") add(w.slice(0, -5));
+  if (w.slice(-4) === "ful") add(w.slice(0, -3));
+  return out;
+}
 function lookupLocal(word) {
   var d = buildDict();
-  return d[String(word || "").toLowerCase()] || null;
+  var w = String(word || "").toLowerCase();
+  if (d[w]) return d[w];
+  var cands = lemmaCandidates(w);
+  for (var i = 0; i < cands.length; i++) {
+    if (d[cands[i]]) return d[cands[i]];
+  }
+  return null;
 }
 
 /* ============ 错词库 ============ */
@@ -1128,7 +1167,9 @@ function tappableHTML(text, edition, episode, pi) {
         var key = paraIdx + ":" + wIdx;
         var mk = pmarks[key] || "";
         var cls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
-        out += '<span class="' + cls + '" onclick="tapWordOrMark(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
+        var midx = markWordList.length;
+        markWordList.push({ mk: "r", ed: edition, ep: episode, pi: pi, para: paraIdx, w: wIdx });
+        out += '<span class="' + cls + '" data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMark(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
         wIdx++;
       } else {
         out += esc(tok);
@@ -1141,7 +1182,8 @@ function tappableHTML(text, edition, episode, pi) {
 /* 标记笔模式：lookup 点词查词；hl 荧光笔；ul 下划线笔；eraser 橡皮。两种标记互斥，再点一次取消 */
 var penMode = "lookup";
 function tapWordOrMark(word, edition, episode, pi, paraIdx, wIdx) {
-  if (penMode === "lookup") { tapWord(word, edition, episode); return; }
+  if (penMode === "lookup") { suppressMarkClick = false; tapWord(word, edition, episode); return; }
+  if (suppressMarkClick) { suppressMarkClick = false; return; }
   var marks = getEpisodeMarks(edition, episode);
   var pkey = String(pi);
   if (!marks[pkey]) marks[pkey] = {};
@@ -1157,7 +1199,124 @@ function tapWordOrMark(word, edition, episode, pi, paraIdx, wIdx) {
   setEpisodeMarks(edition, episode, marks);
   rerenderKeepScroll();
 }
+/* ============ 标记笔拖选：荧光笔/下划线笔模式下按住拖过多个词，松手一次性标上；单击仍切换单个词 ============ */
+var markWordList = []; /* 当前渲染的标记视图里所有单词的位置（按文章顺序），{mk, ed, ep, pi, para, w}；mk: r 阅读 / c 选词填空 / m 长篇匹配 */
+var markDrag = null; /* {startIdx, curIdx, moved, sx, sy} */
+var suppressMarkClick = false; /* 拖选松手后，紧跟的那次 click 不再触发单击切换 */
+function applyMarkRange(kind, a, b) {
+  var lo = Math.min(a, b), hi = Math.max(a, b);
+  var start = markWordList[lo];
+  if (!start) return;
+  var mk = start.mk, ed = start.ed, ep = start.ep;
+  var i, p, pk;
+  if (mk === "c") {
+    var marks = getClozeEpisodeMarks(ed, ep);
+    if (!marks["0"]) marks["0"] = {};
+    for (i = lo; i <= hi; i++) {
+      p = markWordList[i];
+      if (!p || p.mk !== mk || p.ed !== ed || p.ep !== ep) continue;
+      marks["0"][p.para + ":" + p.w] = kind;
+    }
+    setClozeEpisodeMarks(ed, ep, marks);
+  } else if (mk === "m") {
+    var marks2 = getMatchingEpisodeMarks(ed, ep);
+    for (i = lo; i <= hi; i++) {
+      p = markWordList[i];
+      if (!p || p.mk !== mk || p.ed !== ed || p.ep !== ep) continue;
+      pk = String(p.pi);
+      if (!marks2[pk]) marks2[pk] = {};
+      marks2[pk][p.para + ":" + p.w] = kind;
+    }
+    setMatchingEpisodeMarks(ed, ep, marks2);
+  } else {
+    var marks3 = getEpisodeMarks(ed, ep);
+    for (i = lo; i <= hi; i++) {
+      p = markWordList[i];
+      if (!p || p.mk !== mk || p.ed !== ed || p.ep !== ep) continue;
+      pk = String(p.pi);
+      if (!marks3[pk]) marks3[pk] = {};
+      marks3[pk][p.para + ":" + p.w] = kind;
+    }
+    setEpisodeMarks(ed, ep, marks3);
+  }
+}
+function updateMarkPreview() {
+  if (!markDrag || typeof document.querySelectorAll !== "function") return;
+  var lo = Math.min(markDrag.startIdx, markDrag.curIdx), hi = Math.max(markDrag.startIdx, markDrag.curIdx);
+  var els = document.querySelectorAll(".tap-word[data-idx]");
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    var idx = parseInt(el.getAttribute("data-idx"), 10);
+    if (!isNaN(idx) && idx >= lo && idx <= hi) { if (el.classList) el.classList.add("mark-preview"); }
+    else if (el.classList) { el.classList.remove("mark-preview"); }
+  }
+}
+function clearMarkPreview() {
+  if (typeof document.querySelectorAll !== "function") return;
+  var els = document.querySelectorAll(".tap-word.mark-preview");
+  for (var i = 0; i < els.length; i++) { if (els[i].classList) els[i].classList.remove("mark-preview"); }
+}
+function finishMarkDrag() {
+  if (!markDrag) return;
+  var d = markDrag;
+  markDrag = null;
+  clearMarkPreview();
+  if (d.moved && d.curIdx !== d.startIdx) {
+    applyMarkRange(penMode, d.startIdx, d.curIdx);
+    suppressMarkClick = true;
+    rerenderKeepScroll();
+  }
+}
+function markDragDown(e, idx) {
+  suppressMarkClick = false;
+  if (penMode !== "hl" && penMode !== "ul") return true;
+  markDrag = { startIdx: idx, curIdx: idx, moved: false, sx: 0, sy: 0 };
+  if (e && e.preventDefault) e.preventDefault();
+  return false;
+}
+function markDragOver(e, idx) {
+  if (!markDrag) return;
+  if (e && typeof e.buttons === "number" && e.buttons === 0) { markDrag = null; clearMarkPreview(); return; }
+  if (idx === markDrag.curIdx) return;
+  markDrag.curIdx = idx;
+  markDrag.moved = true;
+  updateMarkPreview();
+}
+function markDragUp(e, idx) {
+  if (!markDrag) return;
+  if (typeof idx === "number") markDrag.curIdx = idx;
+  finishMarkDrag();
+}
+function markTouchStart(e, idx) {
+  suppressMarkClick = false;
+  if (penMode !== "hl" && penMode !== "ul") return;
+  var t = (e && e.touches && e.touches[0]) || null;
+  markDrag = { startIdx: idx, curIdx: idx, moved: false, sx: t ? t.clientX : 0, sy: t ? t.clientY : 0 };
+}
+function markTouchMove(e, idx) {
+  if (!markDrag) return;
+  var t = (e && e.touches && e.touches[0]) || null;
+  if (!t) return;
+  var dx = t.clientX - markDrag.sx, dy = t.clientY - markDrag.sy;
+  if (!markDrag.moved && Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+  markDrag.moved = true;
+  if (e && e.preventDefault) e.preventDefault();
+  if (typeof document.elementFromPoint === "function") {
+    var el = document.elementFromPoint(t.clientX, t.clientY);
+    if (el && el.getAttribute) {
+      var ni = parseInt(el.getAttribute("data-idx"), 10);
+      if (!isNaN(ni) && ni !== markDrag.curIdx) { markDrag.curIdx = ni; updateMarkPreview(); }
+    }
+  }
+}
+function markTouchEnd(e, idx) {
+  finishMarkDrag();
+}
+if (typeof window.addEventListener === "function") {
+  window.addEventListener("mouseup", function () { finishMarkDrag(); });
+}
 function setPenMode(mode) {
+  suppressMarkClick = false;
   penMode = mode;
   renderPractice();
 }
@@ -1242,6 +1401,7 @@ function addReadingWordFromTap(edition, episode, word) {
 function renderReadingEpisode() {
   var ep = readingEpisode(curRVersion, curREpisode);
   if (!ep) return renderReadingHome();
+  markWordList = [];
   var vname = R_VERSIONS.filter(function (v) { return v.id === curRVersion; })[0].name;
   var html = '<button class="btn ghost" onclick="curREpisode=null;rShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
   var markCount = countEpisodeMarks(curRVersion, ep.no);
@@ -1465,7 +1625,9 @@ function clozePassageHTML(text, edition, episode) {
         var key = paraIdx + ":" + wIdx;
         var mk = pmarks[key] || "";
         var wcls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
-        out += '<span class="' + wcls + '" onclick="tapWordOrMarkCloze(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
+        var midx = markWordList.length;
+        markWordList.push({ mk: "c", ed: edition, ep: episode, pi: 0, para: paraIdx, w: wIdx });
+        out += '<span class="' + wcls + '" data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMarkCloze(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
         wIdx++;
       } else {
         out += esc(tok);
@@ -1476,7 +1638,8 @@ function clozePassageHTML(text, edition, episode) {
   return out;
 }
 function tapWordOrMarkCloze(word, edition, episode, paraIdx, wIdx) {
-  if (penMode === "lookup") { tapWordCloze(word, edition, episode); return; }
+  if (penMode === "lookup") { suppressMarkClick = false; tapWordCloze(word, edition, episode); return; }
+  if (suppressMarkClick) { suppressMarkClick = false; return; }
   var marks = getClozeEpisodeMarks(edition, episode);
   if (!marks["0"]) marks["0"] = {};
   var key = paraIdx + ":" + wIdx;
@@ -1512,6 +1675,7 @@ function addClozeWordFromTap(edition, episode, word) {
 function renderClozeEpisode() {
   var ep = clozeEpisode(curCVersion, curClozeEpisode);
   if (!ep) return renderClozeHome();
+  markWordList = [];
   var vname = clozeVersionName(curCVersion);
   var html = '<button class="btn ghost" onclick="curClozeEpisode=null;cShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
   var markCount = countClozeMarks(curCVersion, ep.no);
@@ -1730,7 +1894,9 @@ function matchingPassageHTML(ep, edition, episode) {
           var key = paraIdx + ":" + wIdx;
           var mk = pmarks[key] || "";
           var cls = "tap-word" + (mk === "hl" ? " mark-hl" : mk === "ul" ? " mark-ul" : "");
-          out += '<span class="' + cls + '" onclick="tapWordOrMarkMatching(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
+          var midx = markWordList.length;
+          markWordList.push({ mk: "m", ed: edition, ep: episode, pi: pi, para: paraIdx, w: wIdx });
+          out += '<span class="' + cls + '" data-idx="' + midx + '" onmousedown="markDragDown(event,' + midx + ')" onmouseover="markDragOver(event,' + midx + ')" onmouseup="markDragUp(event,' + midx + ')" ontouchstart="markTouchStart(event,' + midx + ')" ontouchmove="markTouchMove(event,' + midx + ')" ontouchend="markTouchEnd(event,' + midx + ')" onclick="tapWordOrMarkMatching(\'' + tok.replace(/'/g, "\\'") + "','" + edition + "'," + episode + "," + pi + "," + paraIdx + "," + wIdx + ')">' + esc(tok) + "</span>";
           wIdx++;
         } else {
           out += esc(tok);
@@ -1742,7 +1908,8 @@ function matchingPassageHTML(ep, edition, episode) {
   return out;
 }
 function tapWordOrMarkMatching(word, edition, episode, pi, paraIdx, wIdx) {
-  if (penMode === "lookup") { tapWordMatching(word, edition, episode); return; }
+  if (penMode === "lookup") { suppressMarkClick = false; tapWordMatching(word, edition, episode); return; }
+  if (suppressMarkClick) { suppressMarkClick = false; return; }
   var marks = getMatchingEpisodeMarks(edition, episode);
   var pkey = String(pi);
   if (!marks[pkey]) marks[pkey] = {};
@@ -1779,6 +1946,7 @@ function addMatchingWordFromTap(edition, episode, word) {
 function renderMatchingEpisode() {
   var ep = matchingEpisode(curMVersion, curMatchingEpisode);
   if (!ep) return renderMatchingHome();
+  markWordList = [];
   var vname = matchingVersionName(curMVersion);
   var html = '<button class="btn ghost" onclick="curMatchingEpisode=null;mShowAnswers=false;renderPractice()">‹ 返回' + esc(vname) + '列表</button>';
   var markCount = countMatchingMarks(curMVersion, ep.no);
